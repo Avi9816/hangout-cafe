@@ -32,6 +32,7 @@ export interface VideoState {
   title?: string;
   sender?: string;
   timestamp?: number;
+  hostId?: string;
 }
 
 export interface RoomState {

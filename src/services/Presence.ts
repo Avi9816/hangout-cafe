@@ -26,6 +26,7 @@ export class SharedPresence {
   
   notes: Note[] = [];
   objects: MemoryObject[] = [];
+  currentVideoState: any = null;
   
   pendingJoin: { room: string, theme: string | null } | null = null;
   sessionStart = Date.now();
@@ -87,7 +88,23 @@ export class SharedPresence {
         if (data.type === 'spotify') {
             setDoc(ref, { state: { spotify: data.url, spotifyHost: this.profile?.alias || 'wanderer' } }, { merge: true });
         } else if (data.type === 'youtube' || data.type === 'magnet') {
-            setDoc(ref, { video: { ...data, host: this.profile?.alias || 'wanderer', sender: this.userId } }, { merge: true });
+            const currentVideo = this.currentVideoState;
+            const isUrlChanging = !currentVideo || currentVideo.url !== data.url;
+            const isHost = currentVideo && currentVideo.hostId === this.userId;
+            
+            if (isUrlChanging || isHost) {
+                const hostId = isUrlChanging ? this.userId : currentVideo.hostId;
+                setDoc(ref, { 
+                    video: { 
+                        ...data, 
+                        hostId,
+                        host: this.profile?.alias || 'wanderer', 
+                        sender: this.userId 
+                    } 
+                }, { merge: true });
+            } else {
+                devLog('[MEDIA_CONTROL_BLOCKED] Blocked non-host media control from:', this.userId);
+            }
         }
     });
   }
@@ -230,10 +247,15 @@ export class SharedPresence {
         
         if(data.state && data.state.spotify) this.bus.emit(APP_EVENTS.REMOTE_MEDIA_UPDATED, { type: 'spotify', url: data.state.spotify, host: data.state.spotifyHost });
 
-        if(data.video && data.video.sender !== this.userId) {
-           this.isRemoteUpdate = true; 
-           this.bus.emit(APP_EVENTS.REMOTE_MEDIA_UPDATED, data.video);
-           setTimeout(() => this.isRemoteUpdate = false, 1500);
+        if(data.video) {
+            this.currentVideoState = data.video;
+            if (data.video.sender !== this.userId) {
+                this.isRemoteUpdate = true; 
+                this.bus.emit(APP_EVENTS.REMOTE_MEDIA_UPDATED, data.video);
+                setTimeout(() => this.isRemoteUpdate = false, 1500);
+            }
+        } else {
+            this.currentVideoState = null;
         }
         
         if(data.presence) {
