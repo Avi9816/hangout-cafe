@@ -1,0 +1,130 @@
+import { EventBus } from '../core/EventBus';
+import { APP_EVENTS } from '../core/events';
+import { VideoState } from '../types';
+import { $ } from '../utils/dom';
+
+export class TorrentManager {
+  private bus: EventBus;
+  private wtClient: any = (window as any).WebTorrent ? new (window as any).WebTorrent() : null;
+  private currentMagnet: string | null = null;
+  private localVideoObj: HTMLVideoElement | null = null;
+  private container = $('local-video-container');
+  private statusEl = $('wt-status');
+  private hostEl = $('local-host');
+  private isRemoteUpdate = false;
+
+  constructor(bus: EventBus) {
+    this.bus = bus;
+    this.setupBusListeners();
+  }
+
+  private setupBusListeners() {
+    this.bus.on(APP_EVENTS.REMOTE_MEDIA_UPDATED, (data: any) => {
+        if (data.type === 'magnet') {
+            this.isRemoteUpdate = true;
+            this.loadMagnet(data);
+            setTimeout(() => this.isRemoteUpdate = false, 1500);
+        }
+    });
+
+    this.bus.on(APP_EVENTS.MEDIA_PLAY_REQUEST, (data: any) => {
+        if (data.type === 'vhs_seed') {
+            this.seedFile(data.file);
+        }
+    });
+  }
+
+  private seedFile(file: File) {
+      if(!this.wtClient) this.wtClient = new (window as any).WebTorrent();
+      if(this.statusEl) this.statusEl.textContent = 'Seeding tape to the room...';
+      
+      this.wtClient.seed(file, (torrent: any) => {
+          this.currentMagnet = torrent.magnetURI;
+          if(this.statusEl) this.statusEl.textContent = `Seeding: ${file.name}`;
+          
+          this.bus.emit(APP_EVENTS.MEDIA_PLAY_REQUEST, {
+              type: 'magnet',
+              url: torrent.magnetURI,
+              action: 'play',
+              time: 0,
+              title: file.name
+          });
+          
+          this.renderTorrent(torrent);
+      });
+  }
+
+  private loadMagnet(videoData: VideoState) {
+      if (!this.wtClient) this.wtClient = new (window as any).WebTorrent();
+      
+      if(this.currentMagnet !== videoData.url) {
+          this.currentMagnet = videoData.url;
+          if(this.container) this.container.classList.add('active');
+          if(this.statusEl) this.statusEl.textContent = `receiving tape from ${videoData.host}...`;
+          
+          if(this.hostEl) { 
+              this.hostEl.textContent = `shared softly by ${videoData.host}`; 
+              this.hostEl.classList.add('visible'); 
+          }
+          
+          this.wtClient.add(videoData.url, (torrent: any) => {
+              if(this.statusEl) this.statusEl.textContent = `playing shared tape...`;
+              this.renderTorrent(torrent);
+          });
+      } else if (this.localVideoObj) {
+          if (Math.abs(this.localVideoObj.currentTime - videoData.time) > 1.5) {
+              this.localVideoObj.currentTime = videoData.time;
+          }
+          if (videoData.action === 'play' && this.localVideoObj.paused) {
+              this.localVideoObj.play().catch(e => console.warn("Auto-play prevented", e));
+          } else if (videoData.action === 'pause' && !this.localVideoObj.paused) {
+              this.localVideoObj.pause();
+          }
+      }
+  }
+
+  private renderTorrent(torrent: any) {
+      if(this.container) {
+          this.container.innerHTML = '';
+          this.container.classList.add('active');
+      }
+      
+      const file = torrent.files.find((f: any) => 
+          f.name.endsWith('.mp4') || f.name.endsWith('.webm') || f.name.endsWith('.ogg')
+      );
+      
+      if(file) {
+          file.appendTo('#local-video-container', { autoplay: true, controls: true }, (err: any, elem: HTMLVideoElement) => {
+              if(err) return console.error(err);
+              this.localVideoObj = elem;
+              
+              // Ensure native attributes are fully enabled
+              elem.controls = true;
+              elem.style.width = '100%';
+              elem.style.borderRadius = '4px';
+              
+              this.localVideoObj.addEventListener('play', () => {
+                  if(!this.isRemoteUpdate) {
+                      this.bus.emit(APP_EVENTS.MEDIA_PLAY_REQUEST, { 
+                          type: 'magnet', url: this.currentMagnet, action: 'play', time: this.localVideoObj!.currentTime 
+                      });
+                  }
+              });
+              this.localVideoObj.addEventListener('pause', () => {
+                  if(!this.isRemoteUpdate) {
+                      this.bus.emit(APP_EVENTS.MEDIA_PLAY_REQUEST, { 
+                          type: 'magnet', url: this.currentMagnet, action: 'pause', time: this.localVideoObj!.currentTime 
+                      });
+                  }
+              });
+              this.localVideoObj.addEventListener('seeked', () => {
+                  if(!this.isRemoteUpdate) {
+                      this.bus.emit(APP_EVENTS.MEDIA_PLAY_REQUEST, { 
+                          type: 'magnet', url: this.currentMagnet, action: 'play', time: this.localVideoObj!.currentTime 
+                      });
+                  }
+              });
+          });
+      }
+  }
+}

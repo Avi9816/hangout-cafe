@@ -1,0 +1,34 @@
+:root {
+  --sky-top: #0a0b12;
+  --sky-bottom: #1a1c2c;
+  --fog-color: rgba(10, 11, 18, 0.95);
+  
+  --text-main: #f7fafc;
+  --text-muted: #a0aec0;
+  --text-glow: rgba(255, 255, 255, 0.15);
+  --accent: #63b3ed;
+  
+  --font-ui: 'Nunito', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-script: 'Caveat', cursive;
+  
+  --trans-cinematic: 2s cubic-bezier(0.4, 0, 0.2, 1);
+  --trans-soft: 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  
+  --cam-x: 0px;
+  --cam-y: 0px;
+  --focus-bg: 0px;
+  --focus-fg: 0px;
+  --scroll-y: 0px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html { width: 100%; overflow-x: hidden; scroll-behavior: smooth; }
+body {
+  width: 100%; min-height: 100vh; background-color: #000; color: var(--text-main);
+  font-family: var(--font-ui); overflow-x: hidden; overflow-y: auto;
+  -webkit-overflow-scrolling: touch; transition: background-color var(--trans-cinematic), filter 8s ease;
+}
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }

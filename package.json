@@ -1,0 +1,22 @@
+{
+  "name": "hangout-cafe",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "firebase": "^11.10.0",
+    "webtorrent": "^2.5.0"
+  },
+  "devDependencies": {
+    "@types/webtorrent": "^0.109.8",
+    "@types/youtube": "^0.0.50",
+    "puppeteer-core": "^25.1.0",
+    "typescript": "^5.2.2",
+    "vite": "^5.0.0"
+  }
+}

@@ -1,0 +1,13 @@
+@keyframes powerOutage { 0% { filter: brightness(1); } 5% { filter: brightness(0); } 10% { filter: brightness(0.8); } 15% { filter: brightness(0.05); } 30% { filter: brightness(0.02); } 100% { filter: brightness(1); } }
+@keyframes windowFlicker { 0%, 100% { opacity: 0.05; } 50% { opacity: 0.5; } 52% { opacity: 0.05; } 54% { opacity: 0.4; } }
+@keyframes rainFall { 0% { transform: translateY(-10vh) translateZ(var(--depth, -100px)) rotate(3deg); opacity: 0; } 20% { opacity: 1; } 80% { opacity: 0.4; } 100% { transform: translateY(110vh) translateZ(var(--depth, -100px)) rotate(3deg); opacity: 0; } }
+@keyframes snowFall { 0% { transform: translateY(-10vh) translateX(0) translateZ(var(--depth, 0)) rotate(0deg); opacity: 0; } 20% { opacity: 0.8; } 100% { transform: translateY(110vh) translateX(60px) translateZ(var(--depth, 0)) rotate(360deg); opacity: 0; } }
+@keyframes fogRoll { 0% { transform: translateY(4vh) scaleX(1); opacity: 0.6; } 100% { transform: translateY(-4vh) scaleX(1.1); opacity: 0.9; } }
+@keyframes lampFlicker { 0%, 100% { opacity: 0.6; } 50% { opacity: 0.9; } }
+@keyframes steamRise { 0% { transform: translateY(0) scaleX(1) rotate(0deg); opacity: 0; } 40% { opacity: 0.3; } 100% { transform: translateY(-150px) scaleX(5) rotate(25deg); opacity: 0; } }
+@keyframes meteorFall { 0% { opacity: 0; transform: translate(0, 0) rotate(40deg); } 10% { opacity: 1; } 100% { opacity: 0; transform: translate(-400px, 800px) rotate(40deg); } }
+@keyframes trainPass { 0% { left: -100vw; opacity: 0; } 30% { opacity: 0.2; } 70% { opacity: 0.2; } 100% { left: 100vw; opacity: 0; } }
+@keyframes gentleFloat { from { transform: translateY(0); } to { transform: translateY(-8px); } }
+@keyframes cinematicFadeIn { to { opacity: 1; } }
+@keyframes slowEmbedFade { from { opacity: 0; filter: blur(30px); } to { opacity: 0.4; } }
+@keyframes orbBreathe { 0% { transform: scale(0.8); opacity: 0.3; } 100% { transform: scale(1.2); opacity: 0.6; } }
