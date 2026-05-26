@@ -104,6 +104,15 @@ export class SharedPresence {
                 }, { merge: true });
             } else {
                 devLog('[MEDIA_CONTROL_BLOCKED] Blocked non-host media control from:', this.userId);
+                const statusEl = $('wt-status');
+                if (statusEl) {
+                    statusEl.textContent = 'Only the host can control shared playback';
+                    setTimeout(() => {
+                        if (statusEl.textContent === 'Only the host can control shared playback') {
+                            statusEl.textContent = '';
+                        }
+                    }, 3000);
+                }
             }
         }
     });
@@ -249,6 +258,15 @@ export class SharedPresence {
 
         if(data.video) {
             this.currentVideoState = data.video;
+            const hostEl = $('local-host');
+            if (hostEl) {
+                if (data.video.hostId === this.userId) {
+                    hostEl.textContent = 'You are controlling this tape';
+                } else {
+                    hostEl.textContent = `Watching with ${data.video.host || 'wanderer'}`;
+                }
+                hostEl.classList.add('visible');
+            }
             if (data.video.sender !== this.userId) {
                 this.isRemoteUpdate = true; 
                 this.bus.emit(APP_EVENTS.REMOTE_MEDIA_UPDATED, data.video);
@@ -256,6 +274,11 @@ export class SharedPresence {
             }
         } else {
             this.currentVideoState = null;
+            const hostEl = $('local-host');
+            if (hostEl) {
+                hostEl.textContent = '';
+                hostEl.classList.remove('visible');
+            }
         }
         
         if(data.presence) {

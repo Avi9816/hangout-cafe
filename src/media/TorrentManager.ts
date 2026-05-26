@@ -83,7 +83,6 @@ export class TorrentManager {
           if(this.statusEl) this.statusEl.textContent = `receiving tape from ${videoData.host}...`;
           
           if(this.hostEl) { 
-              this.hostEl.textContent = `shared softly by ${videoData.host}`; 
               this.hostEl.classList.add('visible'); 
           }
           
