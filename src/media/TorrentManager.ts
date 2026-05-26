@@ -2,6 +2,7 @@ import { EventBus } from '../core/EventBus';
 import { APP_EVENTS } from '../core/events';
 import { VideoState } from '../types';
 import { $ } from '../utils/dom';
+import { devLog } from '../utils/logger';
 
 export class TorrentManager {
   private bus: EventBus;
@@ -21,9 +22,7 @@ export class TorrentManager {
   private setupBusListeners() {
     this.bus.on(APP_EVENTS.REMOTE_MEDIA_UPDATED, (data: any) => {
         if (data.type === 'magnet') {
-            this.isRemoteUpdate = true;
             this.loadMagnet(data);
-            setTimeout(() => this.isRemoteUpdate = false, 1500);
         }
     });
 
@@ -58,6 +57,26 @@ export class TorrentManager {
       if (!this.wtClient) this.wtClient = new (window as any).WebTorrent();
       
       if(this.currentMagnet !== videoData.url) {
+          this.isRemoteUpdate = true;
+          devLog('[VHS_REMOTE_UPDATE] Loading new magnet:', videoData.url);
+          
+          // Cleanup old torrent/video
+          if (this.currentMagnet) {
+              try {
+                  this.wtClient.remove(this.currentMagnet);
+              } catch (e) {
+                  console.warn("Error removing old torrent:", e);
+              }
+          }
+          if (this.localVideoObj) {
+              try {
+                  this.localVideoObj.pause();
+                  this.localVideoObj.src = "";
+                  this.localVideoObj.load();
+              } catch (e) {}
+              this.localVideoObj = null;
+          }
+
           this.currentMagnet = videoData.url;
           if(this.container) this.container.classList.add('active');
           if(this.statusEl) this.statusEl.textContent = `receiving tape from ${videoData.host}...`;
@@ -69,9 +88,11 @@ export class TorrentManager {
           
           this.wtClient.add(videoData.url, (torrent: any) => {
               if(this.statusEl) this.statusEl.textContent = `playing shared tape...`;
-              this.renderTorrent(torrent);
+              this.renderTorrent(torrent, videoData);
           });
       } else if (this.localVideoObj) {
+          this.isRemoteUpdate = true;
+          devLog('[VHS_REMOTE_UPDATE] Applying seek/playback update:', videoData.action, videoData.time);
           if (Math.abs(this.localVideoObj.currentTime - videoData.time) > 1.5) {
               this.localVideoObj.currentTime = videoData.time;
           }
@@ -80,10 +101,13 @@ export class TorrentManager {
           } else if (videoData.action === 'pause' && !this.localVideoObj.paused) {
               this.localVideoObj.pause();
           }
+          setTimeout(() => {
+              this.isRemoteUpdate = false;
+          }, 500);
       }
   }
 
-  private renderTorrent(torrent: any) {
+  private renderTorrent(torrent: any, videoData?: VideoState) {
       if(this.container) {
           this.container.innerHTML = '';
           this.container.classList.add('active');
@@ -95,16 +119,44 @@ export class TorrentManager {
       
       if(file) {
           file.appendTo('#local-video-container', { autoplay: true, controls: true }, (err: any, elem: HTMLVideoElement) => {
-              if(err) return console.error(err);
+              if(err) {
+                  this.isRemoteUpdate = false;
+                  return console.error(err);
+              }
               this.localVideoObj = elem;
               
               // Ensure native attributes are fully enabled
               elem.controls = true;
               elem.style.width = '100%';
               elem.style.borderRadius = '4px';
+
+              // Apply initial state from videoData if available
+              if (videoData) {
+                  const applyState = () => {
+                      devLog('[VHS_REMOTE_UPDATE] Applying initial video state:', videoData.action, videoData.time);
+                      elem.currentTime = videoData.time || 0;
+                      if (videoData.action === 'play') {
+                          elem.play().catch(e => console.warn("Auto-play prevented", e));
+                      } else {
+                          elem.pause();
+                      }
+                      setTimeout(() => {
+                          this.isRemoteUpdate = false;
+                      }, 500);
+                  };
+
+                  if (elem.readyState >= 1) {
+                      applyState();
+                  } else {
+                      elem.addEventListener('loadedmetadata', applyState, { once: true });
+                  }
+              } else {
+                  this.isRemoteUpdate = false;
+              }
               
               this.localVideoObj.addEventListener('play', () => {
                   if(!this.isRemoteUpdate) {
+                      devLog('[VHS_LOCAL_EVENT] play');
                       this.bus.emit(APP_EVENTS.MEDIA_PLAY_REQUEST, { 
                           type: 'magnet', url: this.currentMagnet, action: 'play', time: this.localVideoObj!.currentTime 
                       });
@@ -112,6 +164,7 @@ export class TorrentManager {
               });
               this.localVideoObj.addEventListener('pause', () => {
                   if(!this.isRemoteUpdate) {
+                      devLog('[VHS_LOCAL_EVENT] pause');
                       this.bus.emit(APP_EVENTS.MEDIA_PLAY_REQUEST, { 
                           type: 'magnet', url: this.currentMagnet, action: 'pause', time: this.localVideoObj!.currentTime 
                       });
@@ -119,12 +172,15 @@ export class TorrentManager {
               });
               this.localVideoObj.addEventListener('seeked', () => {
                   if(!this.isRemoteUpdate) {
+                      devLog('[VHS_LOCAL_EVENT] seeked');
                       this.bus.emit(APP_EVENTS.MEDIA_PLAY_REQUEST, { 
                           type: 'magnet', url: this.currentMagnet, action: 'play', time: this.localVideoObj!.currentTime 
                       });
                   }
               });
           });
+      } else {
+          this.isRemoteUpdate = false;
       }
   }
 }
