@@ -31,6 +31,7 @@ export interface VideoState {
   host: string;
   title?: string;
   sender?: string;
+  timestamp?: number;
 }
 
 export interface RoomState {

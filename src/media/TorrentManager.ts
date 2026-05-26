@@ -46,7 +46,8 @@ export class TorrentManager {
               url: torrent.magnetURI,
               action: 'play',
               time: 0,
-              title: file.name
+              title: file.name,
+              timestamp: Date.now()
           });
           
           this.renderTorrent(torrent);
@@ -93,8 +94,13 @@ export class TorrentManager {
       } else if (this.localVideoObj) {
           this.isRemoteUpdate = true;
           devLog('[VHS_REMOTE_UPDATE] Applying seek/playback update:', videoData.action, videoData.time);
-          if (Math.abs(this.localVideoObj.currentTime - videoData.time) > 1.5) {
-              this.localVideoObj.currentTime = videoData.time;
+          let targetTime = videoData.time;
+          if (videoData.action === 'play' && videoData.timestamp) {
+              const elapsed = (Date.now() - videoData.timestamp) / 1000;
+              targetTime += elapsed;
+          }
+          if (Math.abs(this.localVideoObj.currentTime - targetTime) > 1.5) {
+              this.localVideoObj.currentTime = targetTime;
           }
           if (videoData.action === 'play' && this.localVideoObj.paused) {
               this.localVideoObj.play().catch(e => console.warn("Auto-play prevented", e));
@@ -133,8 +139,13 @@ export class TorrentManager {
               // Apply initial state from videoData if available
               if (videoData) {
                   const applyState = () => {
-                      devLog('[VHS_REMOTE_UPDATE] Applying initial video state:', videoData.action, videoData.time);
-                      elem.currentTime = videoData.time || 0;
+                      let targetTime = videoData.time || 0;
+                      if (videoData.action === 'play' && videoData.timestamp) {
+                          const elapsed = (Date.now() - videoData.timestamp) / 1000;
+                          targetTime += elapsed;
+                      }
+                      devLog('[VHS_REMOTE_UPDATE] Applying initial video state:', videoData.action, targetTime);
+                      elem.currentTime = targetTime;
                       if (videoData.action === 'play') {
                           elem.play().catch(e => console.warn("Auto-play prevented", e));
                       } else {
@@ -158,7 +169,7 @@ export class TorrentManager {
                   if(!this.isRemoteUpdate) {
                       devLog('[VHS_LOCAL_EVENT] play');
                       this.bus.emit(APP_EVENTS.MEDIA_PLAY_REQUEST, { 
-                          type: 'magnet', url: this.currentMagnet, action: 'play', time: this.localVideoObj!.currentTime 
+                          type: 'magnet', url: this.currentMagnet, action: 'play', time: this.localVideoObj!.currentTime, timestamp: Date.now() 
                       });
                   }
               });
@@ -166,7 +177,7 @@ export class TorrentManager {
                   if(!this.isRemoteUpdate) {
                       devLog('[VHS_LOCAL_EVENT] pause');
                       this.bus.emit(APP_EVENTS.MEDIA_PLAY_REQUEST, { 
-                          type: 'magnet', url: this.currentMagnet, action: 'pause', time: this.localVideoObj!.currentTime 
+                          type: 'magnet', url: this.currentMagnet, action: 'pause', time: this.localVideoObj!.currentTime, timestamp: Date.now() 
                       });
                   }
               });
@@ -174,7 +185,7 @@ export class TorrentManager {
                   if(!this.isRemoteUpdate) {
                       devLog('[VHS_LOCAL_EVENT] seeked');
                       this.bus.emit(APP_EVENTS.MEDIA_PLAY_REQUEST, { 
-                          type: 'magnet', url: this.currentMagnet, action: 'play', time: this.localVideoObj!.currentTime 
+                          type: 'magnet', url: this.currentMagnet, action: 'play', time: this.localVideoObj!.currentTime, timestamp: Date.now() 
                       });
                   }
               });
