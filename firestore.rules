@@ -1,0 +1,62 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper: Checks if the request is authenticated (standard or anonymous Firebase Auth user)
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Helper: Checks if the authenticated user matches the target userId path parameter
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // 1. User Profiles
+    match /artifacts/{appId}/users/{userId}/userData/profile {
+      allow read: if true; // Publicly readable so peers can display aliases
+      allow write: if isOwner(userId); // Only the authenticated owner can write
+    }
+
+    // 2. Room Root Document
+    match /artifacts/{appId}/public/data/rooms/{roomCode} {
+      allow read: if true; // Publicly readable so anyone can join
+      allow create: if isAuthenticated(); // Only authenticated users can initialize rooms
+      
+      // Enforce that updates only touch allowed fields (no arbitrary root document modifications)
+      allow update: if isAuthenticated() 
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly([
+            'theme', 
+            'state', 
+            'video', 
+            'latestAction', 
+            'notes',    // TEMPORARY BRIDGE FIELD: Deprecate after legacy note clients migrate
+            'objects',  // TEMPORARY BRIDGE FIELD: Deprecate after legacy object clients migrate
+            'presence'  // TEMPORARY BRIDGE FIELD: Deprecate after legacy presence clients migrate
+          ]);
+          
+      allow delete: if false; // Room deletion is prohibited
+    }
+
+    // 3. Room Notes Subcollection (Phase 1)
+    match /artifacts/{appId}/public/data/rooms/{roomCode}/notes/{noteId} {
+      allow read: if true;
+      allow create: if isAuthenticated(); // Only authenticated users can write notes
+      allow update, delete: if false; // Notes are immutable once placed
+    }
+
+    // 4. Room Objects Subcollection (Phase 2)
+    match /artifacts/{appId}/public/data/rooms/{roomCode}/objects/{objectId} {
+      allow read: if true;
+      allow create: if isAuthenticated(); // Only authenticated users can place objects
+      allow update, delete: if false; // Objects are immutable once placed
+    }
+
+    // 5. Room Presence Subcollection (Phase 3)
+    match /artifacts/{appId}/public/data/rooms/{roomCode}/presence/{userId} {
+      allow read: if true;
+      allow write, delete: if isOwner(userId); // Only the authenticated owner can manage their own presence document
+    }
+  }
+}
