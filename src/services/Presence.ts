@@ -2,8 +2,8 @@ import { EventBus } from '../core/EventBus';
 import { APP_EVENTS } from '../core/events';
 import { LifecycleManager } from '../core/Lifecycle';
 import { db, initFirebase } from '../config/firebase';
-import { doc, setDoc, getDoc, onSnapshot, Unsubscribe, updateDoc, deleteField, collection, addDoc, query, orderBy, limit, getDocs, deleteDoc } from 'firebase/firestore';
-import { UserProfile, Note, MemoryObject } from '../types';
+import { doc, setDoc, getDoc, onSnapshot, Unsubscribe, updateDoc, deleteField, collection, addDoc, query, orderBy, limit, getDocs, deleteDoc, runTransaction } from 'firebase/firestore';
+import { UserProfile, Note, MemoryObject, QueueItem } from '../types';
 import { $ } from '../utils/dom'; 
 import { debounce as debounceUtil } from '../utils/timing';
 import { devLog } from '../utils/logger';
@@ -37,6 +37,9 @@ export class SharedPresence {
   useSubcollectionObjects = false;
   unsubPresence: Unsubscribe | null = null;
   useSubcollectionPresence = false;
+  unsubQueue: Unsubscribe | null = null;
+  queue: QueueItem[] = [];
+  joinedAt = 0;
   
   pendingJoin: { room: string, theme: string | null } | null = null;
   sessionStart = Date.now();
@@ -69,7 +72,7 @@ export class SharedPresence {
         window.addEventListener('beforeunload', () => this.leaveRoom());
         window.addEventListener('pagehide', () => this.leaveRoom());
         (window as any).presence = this;
-        (window as any)._firestore = { doc, getDoc, collection, getDocs, deleteDoc };
+        (window as any)._firestore = { doc, getDoc, collection, getDocs, deleteDoc, updateDoc };
     }
   }
 
@@ -126,6 +129,10 @@ export class SharedPresence {
         if (data.type === 'spotify') {
             setDoc(ref, { state: { spotify: data.url, spotifyHost: this.profile?.alias || 'wanderer' } }, { merge: true });
         } else if (data.type === 'youtube' || data.type === 'magnet') {
+            if (data.isEnqueue) {
+                this.enqueueMedia(data.url, data.title || 'unnamed tape');
+                return;
+            }
             const currentVideo = this.currentVideoState;
             const isUrlChanging = !currentVideo || currentVideo.url !== data.url;
             const isHost = currentVideo && currentVideo.hostId === this.userId;
@@ -156,6 +163,16 @@ export class SharedPresence {
                     }, 3000);
                 }
             }
+        }
+    });
+
+    this.bus.on(APP_EVENTS.MEDIA_ENDED, (data: any) => {
+        devLog('[MEDIA_ENDED_RECEIVED]', data);
+        if (this.currentVideoState && this.currentVideoState.hostId === this.userId) {
+            devLog('[MEDIA_ENDED_RECEIVED] We are the host. Auto-advancing queue...');
+            this.playNextInQueue();
+        } else {
+            devLog('[MEDIA_ENDED_RECEIVED] We are not the host. Viewer ignores ended event.');
         }
     });
   }
@@ -244,6 +261,14 @@ export class SharedPresence {
 
   leaveRoom() {
     if(!this.userId || !db || !this.roomCode) return;
+    
+    if (this.unsub) { this.unsub(); this.unsub = null; }
+    if (this.unsubNotes) { this.unsubNotes(); this.unsubNotes = null; }
+    if (this.unsubObjects) { this.unsubObjects(); this.unsubObjects = null; }
+    if (this.unsubPresence) { this.unsubPresence(); this.unsubPresence = null; }
+    if (this.unsubQueue) { this.unsubQueue(); this.unsubQueue = null; }
+    this.queue = [];
+
     const ref = doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode);
     updateDoc(ref, {
         [`presence.${this.userId}`]: deleteField()
@@ -251,6 +276,9 @@ export class SharedPresence {
 
     const presDocRef = doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'presence', this.userId);
     deleteDoc(presDocRef).catch(err => console.warn("Failed to delete presence doc on leaveRoom:", err));
+    this.queue = [];
+    this.roomCode = null;
+    this.currentVideoState = null;
   }
 
   joinRoom(roomKey: string, theme: string | null = null) {
@@ -259,7 +287,11 @@ export class SharedPresence {
     if (this.roomCode && this.roomCode !== roomKey) {
         this.leaveRoom();
     }
-    
+
+    if (this.unsubQueue) { this.unsubQueue(); this.unsubQueue = null; }
+    this.queue = [];
+    this.joinedAt = Date.now();
+
     this.roomCode = roomKey; this.ghostUsers = {}; this.activeUsers = {}; this.lastActionTimestamp = 0;
     const isPublic = ['last-train', 'window-seat', 'between-pages', 'northern-lights'].includes(roomKey);
     devLog('[ROOM_CHANGED_EMIT] joinRoom: roomKey = ' + roomKey + ', isPrivate = ' + !isPublic + ', theme = ' + theme);
@@ -291,7 +323,8 @@ export class SharedPresence {
         alias: this.profile.alias,
         mood: this.profile.mood || 'resting quietly',
         time: Date.now(),
-        uid: this.userId
+        uid: this.userId,
+        joinedAt: this.joinedAt
     }).catch(err => console.error('[FIRESTORE_SUBCOL_WRITE] Error writing subcol presence:', err));
   }
 
@@ -352,6 +385,7 @@ export class SharedPresence {
         if(data.state && data.state.spotify) this.bus.emit(APP_EVENTS.REMOTE_MEDIA_UPDATED, { type: 'spotify', url: data.state.spotify, host: data.state.spotifyHost });
 
         if(data.video) {
+            const oldVideo = this.currentVideoState;
             this.currentVideoState = data.video;
             const hostEl = $('local-host');
             if (hostEl) {
@@ -362,7 +396,8 @@ export class SharedPresence {
                 }
                 hostEl.classList.add('visible');
             }
-            if (data.video.sender !== this.userId) {
+            const isUrlChanging = !oldVideo || oldVideo.url !== data.video.url;
+            if (data.video.sender !== this.userId || isUrlChanging) {
                 this.isRemoteUpdate = true; 
                 this.bus.emit(APP_EVENTS.REMOTE_MEDIA_UPDATED, data.video);
                 setTimeout(() => this.isRemoteUpdate = false, 1500);
@@ -470,12 +505,60 @@ export class SharedPresence {
             if (now - p.time < 60000) {
                 this.activeUsers[p.uid || doc.id] = {
                     alias: p.alias || 'wanderer',
-                    time: p.time
+                    time: p.time,
+                    joinedAt: p.joinedAt || p.time
                 };
             }
         });
         this.bus.emit(APP_EVENTS.USER_COUNT_UPDATED, Object.keys(this.activeUsers).length);
         this.renderPresenceUI();
+
+        // Host Continuity Check
+        if (this.currentVideoState && this.currentVideoState.hostId) {
+            const currentHostId = this.currentVideoState.hostId;
+            if (!this.activeUsers[currentHostId]) {
+                devLog('[HOST_CONTINUITY] Current host has departed:', currentHostId);
+                const activeEntries = Object.entries(this.activeUsers);
+                if (activeEntries.length > 0) {
+                    activeEntries.sort((a, b) => {
+                        const joinedA = a[1].joinedAt || 0;
+                        const joinedB = b[1].joinedAt || 0;
+                        if (joinedA !== joinedB) return joinedA - joinedB;
+                        return a[0].localeCompare(b[0]);
+                    });
+                    const oldestUid = activeEntries[0][0];
+                    devLog('[HOST_CONTINUITY] Oldest active participant is:', oldestUid);
+                    
+                    if (oldestUid === this.userId) {
+                        devLog('[HOST_CONTINUITY] We are the oldest active participant. Initiating takeover...');
+                        const fs = db;
+                        if (fs) {
+                            const roomRef = doc(fs, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode!);
+                            runTransaction(fs, async (transaction) => {
+                                const roomDoc = await transaction.get(roomRef);
+                                if (roomDoc.exists()) {
+                                    const currentVideo = roomDoc.data().video;
+                                    if (currentVideo && currentVideo.hostId === currentHostId) {
+                                        devLog('[HOST_CONTINUITY] Takeover conditions met. Claiming host authority...');
+                                        transaction.update(roomRef, {
+                                            'video.hostId': this.userId,
+                                            'video.host': this.profile?.alias || 'wanderer',
+                                            'video.sender': this.userId
+                                        });
+                                    } else {
+                                        devLog('[HOST_CONTINUITY] Takeover aborted: hostId already changed.');
+                                    }
+                                }
+                            }).then(() => {
+                                devLog('[HOST_CONTINUITY] Takeover transaction completed successfully.');
+                            }).catch(err => {
+                                console.error('[HOST_CONTINUITY] Takeover transaction failed:', err);
+                            });
+                        }
+                    }
+                }
+            }
+        }
       } else {
         if (this.useSubcollectionPresence) {
             this.activeUsers = {};
@@ -485,6 +568,26 @@ export class SharedPresence {
       }
     }, (err) => {
       console.error('[DEBUG_LISTEN_ROOM] Subcollection presence snapshot error:', err);
+    });
+
+    const queueCol = collection(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'queue');
+    const queueQuery = query(queueCol, orderBy('addedAt', 'asc'));
+    this.unsubQueue = onSnapshot(queueQuery, (snap) => {
+      this.queue = snap.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          url: data.url || '',
+          title: data.title || '',
+          addedBy: data.addedBy || '',
+          addedAt: data.addedAt || 0,
+          status: data.status || 'pending'
+        } as QueueItem;
+      });
+      devLog('[QUEUE_SYNC] Realtime queue update received. Count:', this.queue.length);
+      this.bus.emit(APP_EVENTS.SYNC_QUEUE, this.queue);
+    }, (err) => {
+      console.error('[DEBUG_LISTEN_ROOM] Queue snapshot error:', err);
     });
   }
 
@@ -506,5 +609,101 @@ export class SharedPresence {
         });
         presList.textContent = `currently here: ${formattedUsers.join(' · ')}`;
     }
+  }
+
+  async enqueueMedia(url: string, title: string) {
+      if (!this.userId || !db || !this.roomCode) return;
+      devLog('[QUEUE_OPERATION] Enqueuing media:', title, url);
+      const queueCol = collection(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'queue');
+      await addDoc(queueCol, {
+          url,
+          title,
+          addedBy: this.profile?.alias || 'wanderer',
+          addedAt: Date.now(),
+          status: 'pending'
+      }).catch(err => console.error('[QUEUE_OPERATION] Error enqueuing media:', err));
+  }
+
+  async startQueuedMedia(itemId: string) {
+      if (!this.userId || !db || !this.roomCode) return;
+      if (this.currentVideoState && this.currentVideoState.hostId !== this.userId) {
+          devLog('[QUEUE_OPERATION] Blocked non-host startQueuedMedia');
+          return;
+      }
+      
+      devLog('[QUEUE_OPERATION] Starting queued media:', itemId);
+      const targetItem = this.queue.find(q => q.id === itemId);
+      if (!targetItem) return;
+
+      for (const item of this.queue) {
+          const itemRef = doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'queue', item.id);
+          if (item.id === itemId) {
+              await updateDoc(itemRef, { status: 'playing' }).catch(err => console.error('[QUEUE_OPERATION] update target doc status playing error:', err));
+          } else if (item.status === 'playing') {
+              await updateDoc(itemRef, { status: 'completed' }).catch(err => console.error('[QUEUE_OPERATION] update previous doc status completed error:', err));
+          }
+      }
+
+      const type = targetItem.url.includes('youtube.com') || targetItem.url.includes('youtu.be') ? 'youtube' : 'magnet';
+      const ref = doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode);
+      await setDoc(ref, {
+          video: {
+              type,
+              url: targetItem.url,
+              action: 'play',
+              time: 0,
+              title: targetItem.title,
+              timestamp: Date.now(),
+              hostId: this.userId,
+              host: this.profile?.alias || 'wanderer',
+              sender: this.userId
+          }
+      }, { merge: true }).catch(err => console.error('[QUEUE_OPERATION] Error updating root video state:', err));
+  }
+
+  async playNextInQueue() {
+      if (!this.userId || !db || !this.roomCode) return;
+      if (this.currentVideoState && this.currentVideoState.hostId !== this.userId) {
+          devLog('[QUEUE_OPERATION] Blocked non-host playNextInQueue');
+          return;
+      }
+
+      devLog('[QUEUE_OPERATION] Playing next in queue...');
+      const nextItem = this.queue.find(q => q.status === 'pending');
+      
+      for (const item of this.queue) {
+          if (item.status === 'playing') {
+              const itemRef = doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'queue', item.id);
+              await updateDoc(itemRef, { status: 'completed' }).catch(err => console.error('[QUEUE_OPERATION] update status completed error:', err));
+          }
+      }
+
+      if (nextItem) {
+          devLog('[QUEUE_OPERATION] Found next item:', nextItem.title);
+          const itemRef = doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'queue', nextItem.id);
+          await updateDoc(itemRef, { status: 'playing' }).catch(err => console.error('[QUEUE_OPERATION] update status playing error:', err));
+
+          const type = nextItem.url.includes('youtube.com') || nextItem.url.includes('youtu.be') ? 'youtube' : 'magnet';
+          const ref = doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode);
+          await setDoc(ref, {
+              video: {
+                  type,
+                  url: nextItem.url,
+                  action: 'play',
+                  time: 0,
+                  title: nextItem.title,
+                  timestamp: Date.now(),
+                  hostId: this.userId,
+                  host: this.profile?.alias || 'wanderer',
+                  sender: this.userId
+              }
+          }, { merge: true }).catch(err => console.error('[QUEUE_OPERATION] Error updating root video state:', err));
+      } else {
+          devLog('[QUEUE_OPERATION] No pending items left in queue. Clearing root video.');
+          const ref = doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode);
+          await updateDoc(ref, {
+              video: deleteField()
+          }).catch(err => console.error('[QUEUE_OPERATION] Error clearing root video:', err));
+      }
   }
 }

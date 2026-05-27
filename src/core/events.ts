@@ -13,11 +13,13 @@ export const APP_EVENTS = {
   NOTE_POSTED: 'local:note_posted',
   OBJECT_PLACED: 'local:object_placed',
   MEDIA_PLAY_REQUEST: 'local:media_play',
+  MEDIA_ENDED: 'local:media_ended',
 
   // Sync (Service -> UI/Engines)
   REMOTE_NOTES_UPDATED: 'sync:notes',
   REMOTE_OBJECTS_UPDATED: 'sync:objects',
   REMOTE_MEDIA_UPDATED: 'sync:media',
+  SYNC_QUEUE: 'sync:queue',
   AMBIENT_ACTION_RECEIVED: 'sync:action',
 
   // Feedback (Engines -> UI)

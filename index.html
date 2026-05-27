@@ -137,9 +137,14 @@
           <div class="media-input-group">
             <input type="file" id="local-movie-input" accept="video/mp4,video/webm,video/ogg" style="display:none;" aria-label="Select local video file">
             <button class="text-btn" id="btn-select-movie">insert tape (select file)</button>
+            <button class="text-btn" id="btn-skip-tape" style="display:none; color: var(--accent); margin-left: 12px;">skip tape</button>
           </div>
           <div id="wt-status" class="vhs-status" aria-live="polite"></div>
           <div id="local-video-container" class="ambient-embed"></div>
+          <div id="vhs-queue-section" style="margin-top: 24px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 16px;">
+            <h4 style="opacity: 0.8; margin-bottom: 12px; font-family: var(--font-ui); font-size: 0.85rem; letter-spacing: 1px; text-transform: uppercase;">Tape Queue</h4>
+            <div id="vhs-queue-list" style="display: flex; flex-direction: column; gap: 8px;"></div>
+          </div>
         </div>
       </div>
     </div>

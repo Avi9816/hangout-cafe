@@ -76,7 +76,12 @@ export class YouTubeSync {
             if(state && state.action === 'pause') e.target.pauseVideo();
           },
           'onStateChange': (e: any) => {
-             if(!this.isRemoteUpdate) {
+             if (window.YT && e.data == window.YT.PlayerState.ENDED) {
+                this.bus.emit(APP_EVENTS.MEDIA_ENDED, {
+                    type: 'youtube',
+                    url: `https://www.youtube.com/watch?v=${this.currentYtId}`
+                });
+             } else if(!this.isRemoteUpdate) {
                 const action = (e.data == window.YT.PlayerState.PLAYING) ? 'play' : 
                                (e.data == window.YT.PlayerState.PAUSED) ? 'pause' : null;
                 if (action) {

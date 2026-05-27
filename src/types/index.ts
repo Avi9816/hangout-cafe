@@ -35,6 +35,15 @@ export interface VideoState {
   hostId?: string;
 }
 
+export interface QueueItem {
+  id: string;
+  url: string;
+  title: string;
+  addedBy: string;
+  addedAt: number;
+  status: 'pending' | 'playing' | 'completed';
+}
+
 export interface RoomState {
   spotify?: string;
   spotifyHost?: string;

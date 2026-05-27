@@ -1,6 +1,6 @@
 import { EventBus } from '../core/EventBus';
 import { APP_EVENTS } from '../core/events';
-import { Note, MemoryObject } from '../types';
+import { Note, MemoryObject, QueueItem } from '../types';
 import { $, $$, createSafeElement } from '../utils/dom';
 import { devLog } from '../utils/logger';
 
@@ -9,6 +9,7 @@ export class SpatialUI {
   
   notes: Note[] = [];
   objects: MemoryObject[] = [];
+  queue: QueueItem[] = [];
   
   elements: Record<string, HTMLElement | HTMLInputElement | null>;
 
@@ -43,6 +44,14 @@ export class SpatialUI {
           console.log('[DEBUG_SPATIAL_UI] Received REMOTE_OBJECTS_UPDATED, count =', objects.length);
           this.objects = Array.isArray(objects) ? objects : [];
           this.renderObjects();
+      });
+      this.bus.on(APP_EVENTS.SYNC_QUEUE, (queue: QueueItem[]) => {
+          console.log('[DEBUG_SPATIAL_UI] Received sync:queue, count =', queue.length);
+          this.queue = Array.isArray(queue) ? queue : [];
+          this.renderQueue();
+      });
+      this.bus.on(APP_EVENTS.REMOTE_MEDIA_UPDATED, () => {
+          this.renderQueue();
       });
   }
 
@@ -98,6 +107,17 @@ export class SpatialUI {
         movieInput.addEventListener('change', (e: any) => {
             const file = e.target.files[0];
             if(file) this.bus.emit(APP_EVENTS.MEDIA_PLAY_REQUEST, { type: 'vhs_seed', file });
+        });
+    }
+
+    const btnSkip = $('btn-skip-tape');
+    if (btnSkip) {
+        btnSkip.addEventListener('click', () => {
+            this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'soft_click');
+            const presence = (window as any).presence;
+            if (presence) {
+                presence.playNextInQueue();
+            }
         });
     }
   }
@@ -162,5 +182,85 @@ export class SpatialUI {
     });
     table.appendChild(frag);
     console.log('[DEBUG_SPATIAL_UI] renderObjects complete, DOM nodes count =', table.childNodes.length);
+  }
+
+  renderQueue() {
+    const listEl = $('vhs-queue-list');
+    const skipBtn = $('btn-skip-tape');
+    if (!listEl) return;
+    listEl.innerHTML = '';
+
+    const presence = (window as any).presence;
+    if (!presence) return;
+
+    const isHost = presence.currentVideoState && presence.currentVideoState.hostId === presence.userId;
+    
+    // Toggle skip button visibility for host
+    if (skipBtn) {
+        const isPlayingAny = this.queue.some(q => q.status === 'playing');
+        if (isHost && isPlayingAny) {
+            skipBtn.style.display = 'inline-block';
+        } else {
+            skipBtn.style.display = 'none';
+        }
+    }
+
+    if (this.queue.length === 0) {
+        listEl.innerHTML = '<div style="opacity: 0.5; font-style: italic; font-size: 0.8rem;">queue is empty...</div>';
+        return;
+    }
+
+    const frag = document.createDocumentFragment();
+    this.queue.forEach(item => {
+        const itemDiv = createSafeElement('div', 'queue-item');
+        itemDiv.style.display = 'flex';
+        itemDiv.style.justifyContent = 'space-between';
+        itemDiv.style.alignItems = 'center';
+        itemDiv.style.padding = '8px 12px';
+        itemDiv.style.background = 'rgba(255,255,255,0.02)';
+        itemDiv.style.border = '1px solid rgba(255,255,255,0.04)';
+        itemDiv.style.borderRadius = '4px';
+
+        const infoDiv = createSafeElement('div');
+        
+        let statusSymbol = '';
+        if (item.status === 'playing') statusSymbol = '▶';
+        else if (item.status === 'pending') statusSymbol = '⏳';
+        else if (item.status === 'completed') statusSymbol = '✓';
+
+        const titleSpan = createSafeElement('span', '', `${statusSymbol} ${item.title} `);
+        titleSpan.style.fontWeight = item.status === 'playing' ? 'bold' : 'normal';
+        if (item.status === 'playing') titleSpan.style.color = 'var(--accent)';
+        
+        const metaSpan = createSafeElement('span', '', `(added by ${item.addedBy})`);
+        metaSpan.style.fontSize = '0.75rem';
+        metaSpan.style.opacity = '0.5';
+        metaSpan.style.marginLeft = '8px';
+
+        infoDiv.appendChild(titleSpan);
+        infoDiv.appendChild(metaSpan);
+        itemDiv.appendChild(infoDiv);
+
+        // Control buttons for host
+        if (isHost && item.status === 'pending') {
+            const startBtn = createSafeElement('button', 'text-btn', 'play now');
+            startBtn.style.padding = '4px 8px';
+            startBtn.style.fontSize = '0.75rem';
+            startBtn.style.margin = '0';
+            startBtn.addEventListener('click', () => {
+                this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'soft_click');
+                presence.startQueuedMedia(item.id);
+            });
+            itemDiv.appendChild(startBtn);
+        } else {
+            const statusLabel = createSafeElement('span', '', item.status);
+            statusLabel.style.fontSize = '0.75rem';
+            statusLabel.style.opacity = '0.5';
+            itemDiv.appendChild(statusLabel);
+        }
+
+        frag.appendChild(itemDiv);
+    });
+    listEl.appendChild(frag);
   }
 }

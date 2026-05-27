@@ -39,7 +39,7 @@ export class TorrentManager {
       
       this.wtClient.seed(file, (torrent: any) => {
           this.currentMagnet = torrent.magnetURI;
-          if(this.statusEl) this.statusEl.textContent = `Seeding: ${file.name}`;
+          if(this.statusEl) this.statusEl.textContent = `Seeding complete: ${file.name}`;
           
           this.bus.emit(APP_EVENTS.MEDIA_PLAY_REQUEST, {
               type: 'magnet',
@@ -47,10 +47,9 @@ export class TorrentManager {
               action: 'play',
               time: 0,
               title: file.name,
-              timestamp: Date.now()
+              timestamp: Date.now(),
+              isEnqueue: true
           });
-          
-          this.renderTorrent(torrent);
       });
   }
 
@@ -187,6 +186,13 @@ export class TorrentManager {
                           type: 'magnet', url: this.currentMagnet, action: 'play', time: this.localVideoObj!.currentTime, timestamp: Date.now() 
                       });
                   }
+              });
+              this.localVideoObj.addEventListener('ended', () => {
+                  devLog('[VHS_LOCAL_EVENT] ended');
+                  this.bus.emit(APP_EVENTS.MEDIA_ENDED, {
+                      type: 'magnet',
+                      url: this.currentMagnet
+                  });
               });
           });
       } else {
