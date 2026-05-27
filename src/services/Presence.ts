@@ -27,6 +27,7 @@ export class SharedPresence {
   notes: Note[] = [];
   objects: MemoryObject[] = [];
   currentVideoState: any = null;
+  lastActionTimestamp = 0;
   
   pendingJoin: { room: string, theme: string | null } | null = null;
   sessionStart = Date.now();
@@ -70,6 +71,7 @@ export class SharedPresence {
         this.notes.unshift(note);
         if(this.notes.length > 50) this.notes.pop();
         this.debouncedSyncNotes(this.notes);
+        this.broadcastActivity(`${this.profile?.alias || 'wanderer'} pinned a note`, '📌');
     });
 
     this.bus.on(APP_EVENTS.OBJECT_PLACED, (obj: MemoryObject) => {
@@ -77,6 +79,7 @@ export class SharedPresence {
         this.objects.unshift(obj);
         if(this.objects.length > 20) this.objects.pop();
         this.debouncedSyncObjects(this.objects);
+        this.broadcastActivity(`${this.profile?.alias || 'wanderer'} placed a ${obj.label}`, obj.emoji);
     });
 
     this.bus.on(APP_EVENTS.ROOM_JOIN_REQUEST, (data: any) => {
@@ -106,6 +109,10 @@ export class SharedPresence {
                         sender: this.userId 
                     } 
                 }, { merge: true });
+                
+                if (isUrlChanging && data.type === 'magnet') {
+                    this.broadcastActivity(`${this.profile?.alias || 'wanderer'} started a tape`, '📼');
+                }
             } else {
                 devLog('[MEDIA_CONTROL_BLOCKED] Blocked non-host media control from:', this.userId);
                 const statusEl = $('wt-status');
@@ -196,6 +203,14 @@ export class SharedPresence {
      if(corner) this.joinRoom(corner);
   }
 
+  broadcastActivity(text: string, emoji: string) {
+    if(!this.userId || !db || !this.roomCode) return;
+    const ref = doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode);
+    setDoc(ref, { 
+        latestAction: { text, emoji, sender: this.userId, timestamp: Date.now() } 
+    }, { merge: true }).catch(err => console.warn("Failed to broadcast activity:", err));
+  }
+
   leaveRoom() {
     if(!this.userId || !db || !this.roomCode) return;
     const ref = doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode);
@@ -211,7 +226,7 @@ export class SharedPresence {
         this.leaveRoom();
     }
     
-    this.roomCode = roomKey; this.ghostUsers = {}; this.activeUsers = {};
+    this.roomCode = roomKey; this.ghostUsers = {}; this.activeUsers = {}; this.lastActionTimestamp = 0;
     const isPublic = ['last-train', 'window-seat', 'between-pages', 'northern-lights'].includes(roomKey);
     devLog('[ROOM_CHANGED_EMIT] joinRoom: roomKey = ' + roomKey + ', isPrivate = ' + !isPublic + ', theme = ' + theme);
     this.bus.emit(APP_EVENTS.ROOM_CHANGED, { room: roomKey, isPrivate: !isPublic, theme: theme });
@@ -225,7 +240,9 @@ export class SharedPresence {
           .then(() => console.log('[FIRESTORE_ROOM_WRITE] private room metadata write SUCCESS'))
           .catch(err => console.error('[FIRESTORE_ROOM_WRITE] private room metadata write ERROR:', err));
     }
-    this.updatePresence(); this.listenToRoom();
+    this.updatePresence(); 
+    this.listenToRoom();
+    this.broadcastActivity(`${this.profile?.alias || 'wanderer'} entered the corner`, '🚪');
   }
 
   updatePresence() {
@@ -250,7 +267,16 @@ export class SharedPresence {
       console.log('[DEBUG_LISTEN_ROOM] Callback fired! path:', docPath, 'exists:', snap.exists());
       if(snap.exists()) {
         const data = snap.data();
-        if(data.latestAction) this.bus.emit(APP_EVENTS.AMBIENT_ACTION_RECEIVED, data.latestAction);
+        if(data.latestAction && data.latestAction.sender !== this.userId) {
+          const actionTime = data.latestAction.timestamp || 0;
+          if (actionTime > this.lastActionTimestamp) {
+            this.lastActionTimestamp = actionTime;
+            const actionAge = Date.now() - actionTime;
+            if (actionAge < 10000) {
+                this.bus.emit(APP_EVENTS.AMBIENT_ACTION_RECEIVED, data.latestAction);
+            }
+          }
+        }
         
         const isPublic = ['last-train', 'window-seat', 'between-pages', 'northern-lights'].includes(this.roomCode!);
         if(data.theme) {

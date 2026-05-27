@@ -47,9 +47,9 @@ export class AmbientFeed {
         this.el.classList.add('show');
     }
     
-    await new Promise(r => this.lifecycle.setTimeout(r as () => void, 9000));
+    await new Promise(r => this.lifecycle.setTimeout(r as () => void, 4500));
     if(this.el) this.el.classList.remove('show');
-    await new Promise(r => this.lifecycle.setTimeout(r as () => void, 6000));
+    await new Promise(r => this.lifecycle.setTimeout(r as () => void, 1500));
     
     this.isDisplaying = false;
     if (this.queue.length > 0) this.processQueue();
