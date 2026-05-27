@@ -2,7 +2,7 @@ import { EventBus } from '../core/EventBus';
 import { APP_EVENTS } from '../core/events';
 import { LifecycleManager } from '../core/Lifecycle';
 import { db, initFirebase } from '../config/firebase';
-import { doc, setDoc, getDoc, onSnapshot, Unsubscribe, updateDoc, deleteField } from 'firebase/firestore';
+import { doc, setDoc, getDoc, onSnapshot, Unsubscribe, updateDoc, deleteField, collection, addDoc, query, orderBy, limit, getDocs } from 'firebase/firestore';
 import { UserProfile, Note, MemoryObject } from '../types';
 import { $ } from '../utils/dom'; 
 import { debounce as debounceUtil } from '../utils/timing';
@@ -12,6 +12,9 @@ declare const __app_id: any;
 
 export class SharedPresence {
   private bus: EventBus;
+  get db() {
+    return db;
+  }
   
   profile: UserProfile | null = null;
   lifecycle = new LifecycleManager();
@@ -28,6 +31,8 @@ export class SharedPresence {
   objects: MemoryObject[] = [];
   currentVideoState: any = null;
   lastActionTimestamp = 0;
+  unsubNotes: Unsubscribe | null = null;
+  useSubcollectionNotes = false;
   
   pendingJoin: { room: string, theme: string | null } | null = null;
   sessionStart = Date.now();
@@ -59,9 +64,8 @@ export class SharedPresence {
     if (typeof window !== 'undefined') {
         window.addEventListener('beforeunload', () => this.leaveRoom());
         window.addEventListener('pagehide', () => this.leaveRoom());
-        if (import.meta.env.DEV) {
-            (window as any).presence = this;
-        }
+        (window as any).presence = this;
+        (window as any)._firestore = { doc, getDoc, collection, getDocs };
     }
   }
 
@@ -72,6 +76,17 @@ export class SharedPresence {
         if(this.notes.length > 50) this.notes.pop();
         this.debouncedSyncNotes(this.notes);
         this.broadcastActivity(`${this.profile?.alias || 'wanderer'} pinned a note`, '📌');
+
+        if(db && this.roomCode) {
+            const notesCol = collection(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'notes');
+            addDoc(notesCol, {
+                text: note.text,
+                author: note.author,
+                id: note.id,
+                isEcho: note.isEcho || false,
+                createdAt: Date.now()
+            }).catch(err => console.error('[FIRESTORE_SUBCOL_WRITE] Error writing subcol note:', err));
+        }
     });
 
     this.bus.on(APP_EVENTS.OBJECT_PLACED, (obj: MemoryObject) => {
@@ -259,6 +274,8 @@ export class SharedPresence {
       return;
     }
     if(this.unsub) { this.unsub(); this.unsub = null; }
+    if(this.unsubNotes) { this.unsubNotes(); this.unsubNotes = null; }
+    this.useSubcollectionNotes = false;
 
     const docPath = `artifacts/${this.appId}/public/data/rooms/${this.roomCode}`;
     console.log('[DEBUG_LISTEN_ROOM] Subscribing to path:', docPath, 'uid:', this.userId, 'room:', this.roomCode);
@@ -285,11 +302,13 @@ export class SharedPresence {
             this.bus.emit(APP_EVENTS.ROOM_CHANGED, { room: this.roomCode, isPrivate: !isPublic, theme: data.theme });
         }
 
-        // Force UI updates with current state
-        this.notes = data.notes || [];
-        console.log('[DEBUG_LISTEN_ROOM] snap notes.length =', this.notes.length);
-        console.log('[DEBUG_LISTEN_ROOM] Emitting REMOTE_NOTES_UPDATED');
-        this.bus.emit(APP_EVENTS.REMOTE_NOTES_UPDATED, this.notes);
+        // Dual-read logic: fallback to legacy array only when subcollection is empty/not active
+        if (!this.useSubcollectionNotes) {
+            this.notes = data.notes || [];
+            console.log('[DEBUG_LISTEN_ROOM] snap legacy notes.length =', this.notes.length);
+            console.log('[DEBUG_LISTEN_ROOM] Emitting REMOTE_NOTES_UPDATED (legacy)');
+            this.bus.emit(APP_EVENTS.REMOTE_NOTES_UPDATED, this.notes);
+        }
 
         this.objects = data.objects || [];
         console.log('[DEBUG_LISTEN_ROOM] snap objects.length =', this.objects.length);
@@ -341,6 +360,35 @@ export class SharedPresence {
       }
     }, (err) => {
       console.error('[DEBUG_LISTEN_ROOM] onSnapshot error:', err);
+    });
+
+    const notesCol = collection(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'notes');
+    const notesQuery = query(notesCol, orderBy('createdAt', 'desc'), limit(50));
+    
+    this.unsubNotes = onSnapshot(notesQuery, (subcolSnap) => {
+      console.log('[DEBUG_LISTEN_ROOM] Subcollection notes snapshot fired! empty:', subcolSnap.empty);
+      if (!subcolSnap.empty) {
+        this.useSubcollectionNotes = true;
+        this.notes = subcolSnap.docs.map(doc => {
+            const data = doc.data();
+            return {
+                text: data.text || '',
+                author: data.author || 'wanderer',
+                id: data.id || 0,
+                isEcho: data.isEcho || false
+            } as Note;
+        });
+        console.log('[DEBUG_LISTEN_ROOM] snap subcol notes.length =', this.notes.length);
+        console.log('[DEBUG_LISTEN_ROOM] Emitting REMOTE_NOTES_UPDATED (subcollection)');
+        this.bus.emit(APP_EVENTS.REMOTE_NOTES_UPDATED, this.notes);
+      } else {
+        if (this.useSubcollectionNotes) {
+            this.notes = [];
+            this.bus.emit(APP_EVENTS.REMOTE_NOTES_UPDATED, this.notes);
+        }
+      }
+    }, (err) => {
+      console.error('[DEBUG_LISTEN_ROOM] Subcollection notes snapshot error:', err);
     });
   }
 
