@@ -2,7 +2,7 @@ import { EventBus } from '../core/EventBus';
 import { APP_EVENTS } from '../core/events';
 import { LifecycleManager } from '../core/Lifecycle';
 import { db, initFirebase } from '../config/firebase';
-import { doc, setDoc, getDoc, onSnapshot, Unsubscribe } from 'firebase/firestore';
+import { doc, setDoc, getDoc, onSnapshot, Unsubscribe, updateDoc, deleteField } from 'firebase/firestore';
 import { UserProfile, Note, MemoryObject } from '../types';
 import { $ } from '../utils/dom'; 
 import { debounce as debounceUtil } from '../utils/timing';
@@ -55,8 +55,12 @@ export class SharedPresence {
     this.setupBusListeners();
     this.lifecycle.setInterval(() => this.updatePresence(), 30000);
     this.bootstrapFirebase();
-    if (typeof window !== 'undefined' && import.meta.env.DEV) {
-        (window as any).presence = this;
+    if (typeof window !== 'undefined') {
+        window.addEventListener('beforeunload', () => this.leaveRoom());
+        window.addEventListener('pagehide', () => this.leaveRoom());
+        if (import.meta.env.DEV) {
+            (window as any).presence = this;
+        }
     }
   }
 
@@ -192,8 +196,20 @@ export class SharedPresence {
      if(corner) this.joinRoom(corner);
   }
 
+  leaveRoom() {
+    if(!this.userId || !db || !this.roomCode) return;
+    const ref = doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode);
+    updateDoc(ref, {
+        [`presence.${this.userId}`]: deleteField()
+    }).catch(err => console.warn("Failed to clean up presence on leaveRoom:", err));
+  }
+
   joinRoom(roomKey: string, theme: string | null = null) {
     if(!this.profile) { this.pendingJoin = { room: roomKey, theme }; return; }
+    
+    if (this.roomCode && this.roomCode !== roomKey) {
+        this.leaveRoom();
+    }
     
     this.roomCode = roomKey; this.ghostUsers = {}; this.activeUsers = {};
     const isPublic = ['last-train', 'window-seat', 'between-pages', 'northern-lights'].includes(roomKey);
@@ -288,8 +304,11 @@ export class SharedPresence {
               if(now - p.time < 60000) this.activeUsers[id] = p;
           });
           this.bus.emit(APP_EVENTS.USER_COUNT_UPDATED, Object.keys(this.activeUsers).length);
-          this.renderPresenceUI();
+        } else {
+          this.activeUsers = {};
+          this.bus.emit(APP_EVENTS.USER_COUNT_UPDATED, 0);
         }
+        this.renderPresenceUI();
       } else {
           this.bus.emit(APP_EVENTS.REMOTE_NOTES_UPDATED, []);
           this.bus.emit(APP_EVENTS.REMOTE_OBJECTS_UPDATED, []);
@@ -300,14 +319,22 @@ export class SharedPresence {
   }
 
   renderPresenceUI() {
-    const activeArray = Object.values(this.activeUsers); 
-    const count = activeArray.length; 
+    const activeEntries = Object.entries(this.activeUsers); 
+    const count = activeEntries.length; 
     const presList = $('room-presence-list');
     const soulCount = $('soul-count');
     if(!presList || !soulCount) return;
 
     presList.innerHTML = '';
     soulCount.textContent = count > 1 ? `${count} souls resting here` : 'you are resting alone';
-    if(count > 1) presList.appendChild(document.createTextNode(`currently here: ${activeArray.map(u => u.alias).join(' · ')}`));
+    
+    if (count > 0) {
+        const hostId = this.currentVideoState?.hostId;
+        const formattedUsers = activeEntries.map(([uid, u]: [string, any]) => {
+            const isHost = hostId && uid === hostId;
+            return isHost ? `${u.alias} (📼 host)` : u.alias;
+        });
+        presList.textContent = `currently here: ${formattedUsers.join(' · ')}`;
+    }
   }
 }

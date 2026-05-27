@@ -82,3 +82,14 @@ h2 { font-family: var(--font-script); font-size: clamp(2rem, 8vw, 2.5rem); font-
 @media (min-width: 600px) {
   .destinations-list { grid-template-columns: 1fr 1fr; }
 }
+
+.room-presence-list {
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+  margin-top: 12px;
+  opacity: 0.85;
+  font-weight: 300;
+  text-transform: lowercase;
+}
