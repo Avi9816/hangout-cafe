@@ -20,6 +20,8 @@ export const APP_EVENTS = {
   REMOTE_OBJECTS_UPDATED: 'sync:objects',
   REMOTE_MEDIA_UPDATED: 'sync:media',
   SYNC_QUEUE: 'sync:queue',
+  SYNC_HISTORY: 'sync:history',
+  SYNC_MEMORIES: 'sync:memories',
   AMBIENT_ACTION_RECEIVED: 'sync:action',
 
   // Feedback (Engines -> UI)

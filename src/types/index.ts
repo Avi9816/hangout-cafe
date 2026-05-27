@@ -57,6 +57,34 @@ export interface ActionLog {
   isTrace: boolean;
 }
 
+export interface RoomHistoryEvent {
+  id: string;
+  type:
+    | 'tape_played'
+    | 'note_pinned'
+    | 'object_placed'
+    | 'host_changed'
+    | 'room_created';
+  text: string;
+  createdAt: number;
+  createdBy: string;
+}
+
+export interface RoomMemory {
+  id: string;
+  type:
+    | 'note'
+    | 'object'
+    | 'tape'
+    | 'moment';
+  title: string;
+  description?: string;
+  createdAt: number;
+  createdBy: string;
+  creatorUid?: string;
+  payload: any;
+}
+
 declare global {
   interface Window {
     app?: any;

@@ -71,5 +71,26 @@ service cloud.firestore {
         && request.resource.data.addedAt == resource.data.addedAt;
       allow delete: if isAuthenticated();
     }
+
+    // 7. Room History Subcollection
+    match /artifacts/{appId}/public/data/rooms/{roomCode}/history/{eventId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update, delete: if false;
+    }
+
+    // 8. Room Memories Subcollection
+    match /artifacts/{appId}/public/data/rooms/{roomCode}/memories/{memoryId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'description'])
+        && request.resource.data.creatorUid == resource.data.creatorUid
+        && request.resource.data.type == resource.data.type
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.payload == resource.data.payload;
+      allow delete: if isAuthenticated() && resource.data.creatorUid == request.auth.uid;
+    }
   }
 }

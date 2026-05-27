@@ -1,6 +1,6 @@
 import { EventBus } from '../core/EventBus';
 import { APP_EVENTS } from '../core/events';
-import { Note, MemoryObject, QueueItem } from '../types';
+import { Note, MemoryObject, QueueItem, RoomHistoryEvent, RoomMemory } from '../types';
 import { $, $$, createSafeElement } from '../utils/dom';
 import { devLog } from '../utils/logger';
 
@@ -10,6 +10,8 @@ export class SpatialUI {
   notes: Note[] = [];
   objects: MemoryObject[] = [];
   queue: QueueItem[] = [];
+  history: RoomHistoryEvent[] = [];
+  memories: RoomMemory[] = [];
   
   elements: Record<string, HTMLElement | HTMLInputElement | null>;
 
@@ -52,6 +54,16 @@ export class SpatialUI {
       });
       this.bus.on(APP_EVENTS.REMOTE_MEDIA_UPDATED, () => {
           this.renderQueue();
+      });
+      this.bus.on(APP_EVENTS.SYNC_HISTORY, (history: RoomHistoryEvent[]) => {
+          console.log('[DEBUG_SPATIAL_UI] Received sync:history, count =', history.length);
+          this.history = Array.isArray(history) ? history : [];
+          this.renderHistory();
+      });
+      this.bus.on(APP_EVENTS.SYNC_MEMORIES, (memories: RoomMemory[]) => {
+          console.log('[DEBUG_SPATIAL_UI] Received sync:memories, count =', memories.length);
+          this.memories = Array.isArray(memories) ? memories : [];
+          this.renderMemories();
       });
   }
 
@@ -152,7 +164,28 @@ export class SpatialUI {
       else if(ageHours > 24) div.style.opacity = '0.5'; 
       const txtSpan = createSafeElement('span', '', n.text);
       const sigSpan = createSafeElement('span', 'note-signature', `— ${n.author}`);
-      div.appendChild(txtSpan); div.appendChild(sigSpan);
+      div.appendChild(txtSpan); 
+      div.appendChild(sigSpan);
+
+      const pinBtn = createSafeElement('button', 'text-btn', '📌 pin');
+      pinBtn.style.marginLeft = '12px';
+      pinBtn.style.padding = '0';
+      pinBtn.style.fontSize = '0.75rem';
+      pinBtn.style.opacity = '0.4';
+      pinBtn.addEventListener('click', () => {
+          this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'soft_click');
+          const presence = (window as any).presence;
+          if (presence) {
+              presence.saveMemory({
+                  type: 'note',
+                  title: `Note: "${n.text.substring(0, 20)}${n.text.length > 20 ? '...' : ''}"`,
+                  description: `Left by ${n.author}`,
+                  payload: { text: n.text, author: n.author }
+              });
+          }
+      });
+      div.appendChild(pinBtn);
+
       frag.appendChild(div);
     });
     wall.appendChild(frag);
@@ -177,6 +210,27 @@ export class SpatialUI {
       const lblSpan = createSafeElement('span', '', o.label);
       const hstSpan = createSafeElement('span', 'memory-host', o.author);
       div.appendChild(emSpan); div.appendChild(lblSpan); div.appendChild(hstSpan);
+
+      const pinBtn = createSafeElement('button', 'text-btn', '📌 pin');
+      pinBtn.style.marginLeft = '8px';
+      pinBtn.style.padding = '0';
+      pinBtn.style.fontSize = '0.7rem';
+      pinBtn.style.opacity = '0.4';
+      pinBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'soft_click');
+          const presence = (window as any).presence;
+          if (presence) {
+              presence.saveMemory({
+                  type: 'object',
+                  title: `${o.emoji} ${o.label}`,
+                  description: `Placed by ${o.author}`,
+                  payload: { emoji: o.emoji, label: o.label, author: o.author }
+              });
+          }
+      });
+      div.appendChild(pinBtn);
+
       div.style.transform = `rotate(${Math.random() * 12 - 6}deg)`;
       frag.appendChild(div);
     });
@@ -239,6 +293,32 @@ export class SpatialUI {
 
         infoDiv.appendChild(titleSpan);
         infoDiv.appendChild(metaSpan);
+
+        if (item.status === 'playing') {
+            const tapePinBtn = createSafeElement('button', 'text-btn', '📌 pin');
+            tapePinBtn.style.marginLeft = '12px';
+            tapePinBtn.style.padding = '0';
+            tapePinBtn.style.fontSize = '0.75rem';
+            tapePinBtn.style.opacity = '0.4';
+            tapePinBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'soft_click');
+                if (presence.currentVideoState) {
+                    presence.saveMemory({
+                        type: 'tape',
+                        title: `Tape: ${item.title}`,
+                        description: `Played by ${item.addedBy}`,
+                        payload: {
+                            url: item.url,
+                            title: item.title,
+                            type: presence.currentVideoState.type || 'magnet'
+                        }
+                    });
+                }
+            });
+            infoDiv.appendChild(tapePinBtn);
+        }
+
         itemDiv.appendChild(infoDiv);
 
         // Control buttons for host
@@ -259,6 +339,162 @@ export class SpatialUI {
             itemDiv.appendChild(statusLabel);
         }
 
+        frag.appendChild(itemDiv);
+    });
+    listEl.appendChild(frag);
+  }
+
+  renderHistory() {
+    const listEl = $('room-history-list');
+    if (!listEl) return;
+    listEl.innerHTML = '';
+
+    if (this.history.length === 0) {
+        listEl.innerHTML = '<div style="opacity: 0.5; font-style: italic; font-size: 0.8rem;">no recent activity...</div>';
+        return;
+    }
+
+    const frag = document.createDocumentFragment();
+    this.history.forEach(item => {
+        const itemDiv = createSafeElement('div');
+        itemDiv.style.fontSize = '0.8rem';
+        itemDiv.style.opacity = '0.7';
+        itemDiv.style.borderBottom = '1px solid rgba(255,255,255,0.02)';
+        itemDiv.style.padding = '4px 0';
+        
+        let typeSymbol = '';
+        if (item.type === 'tape_played') typeSymbol = '📼';
+        else if (item.type === 'note_pinned') typeSymbol = '📌';
+        else if (item.type === 'object_placed') typeSymbol = '🧸';
+        else if (item.type === 'host_changed') typeSymbol = '👑';
+        else if (item.type === 'room_created') typeSymbol = '🚪';
+
+        const timeString = new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        
+        const txtSpan = createSafeElement('span', '', `${typeSymbol} [${timeString}] ${item.text}`);
+        itemDiv.appendChild(txtSpan);
+        frag.appendChild(itemDiv);
+    });
+    listEl.appendChild(frag);
+
+    // Update "Last tape played" based on history
+    const lastTapeDiv = $('last-tape-played');
+    if (lastTapeDiv) {
+        const lastTapeEvent = this.history.find(h => h.type === 'tape_played');
+        if (lastTapeEvent) {
+            let cleanText = lastTapeEvent.text
+                .replace('Started playing tape ', '')
+                .replace('Queue auto-advanced to ', '')
+                .replace('Started playing queued tape ', '');
+            lastTapeDiv.textContent = `Last tape played: ${cleanText}`;
+            lastTapeDiv.style.display = 'block';
+        } else {
+            lastTapeDiv.style.display = 'none';
+        }
+    }
+  }
+
+  renderMemories() {
+    const listEl = $('room-memories-list');
+    if (!listEl) return;
+    listEl.innerHTML = '';
+
+    const presence = (window as any).presence;
+    if (!presence) return;
+
+    if (this.memories.length === 0) {
+        listEl.innerHTML = '<div style="opacity: 0.5; font-style: italic; font-size: 0.8rem;">no memories pinned...</div>';
+        return;
+    }
+
+    const frag = document.createDocumentFragment();
+    this.memories.forEach(item => {
+        const itemDiv = createSafeElement('div');
+        itemDiv.style.display = 'flex';
+        itemDiv.style.justifyContent = 'space-between';
+        itemDiv.style.alignItems = 'center';
+        itemDiv.style.padding = '8px 12px';
+        itemDiv.style.background = 'rgba(255,255,255,0.02)';
+        itemDiv.style.border = '1px solid rgba(255,255,255,0.04)';
+        itemDiv.style.borderRadius = '4px';
+
+        const infoDiv = createSafeElement('div');
+        
+        let typeSymbol = '';
+        if (item.type === 'tape') typeSymbol = '📼';
+        else if (item.type === 'note') typeSymbol = '📌';
+        else if (item.type === 'object') typeSymbol = '🧸';
+        else if (item.type === 'moment') typeSymbol = '⏳';
+
+        const titleSpan = createSafeElement('span', '', `${typeSymbol} ${item.title}`);
+        titleSpan.style.fontWeight = '500';
+        
+        const descSpan = createSafeElement('span', '', ` — ${item.description || ''}`);
+        descSpan.style.fontSize = '0.75rem';
+        descSpan.style.opacity = '0.6';
+
+        const creatorSpan = createSafeElement('span', '', ` (pinned by ${item.createdBy})`);
+        creatorSpan.style.fontSize = '0.7rem';
+        creatorSpan.style.opacity = '0.4';
+        creatorSpan.style.marginLeft = '6px';
+
+        infoDiv.appendChild(titleSpan);
+        infoDiv.appendChild(descSpan);
+        infoDiv.appendChild(creatorSpan);
+        itemDiv.appendChild(infoDiv);
+
+        // Actions: Restore / Delete
+        const actionsDiv = createSafeElement('div');
+        actionsDiv.style.display = 'flex';
+        actionsDiv.style.gap = '8px';
+
+        const restoreBtn = createSafeElement('button', 'text-btn', 'restore');
+        restoreBtn.style.padding = '2px 6px';
+        restoreBtn.style.fontSize = '0.75rem';
+        restoreBtn.style.margin = '0';
+        restoreBtn.addEventListener('click', () => {
+            this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'wood_creak');
+            if (item.type === 'tape') {
+                this.bus.emit(APP_EVENTS.MEDIA_PLAY_REQUEST, {
+                    type: item.payload.type || 'magnet',
+                    url: item.payload.url,
+                    action: 'play',
+                    time: 0,
+                    title: item.payload.title,
+                    timestamp: Date.now()
+                });
+            } else if (item.type === 'note') {
+                this.bus.emit(APP_EVENTS.NOTE_POSTED, {
+                    text: item.payload.text,
+                    author: item.payload.author,
+                    id: Date.now()
+                });
+            } else if (item.type === 'object') {
+                this.bus.emit(APP_EVENTS.OBJECT_PLACED, {
+                    emoji: item.payload.emoji,
+                    label: item.payload.label,
+                    author: item.payload.author,
+                    id: Date.now()
+                });
+            }
+        });
+        actionsDiv.appendChild(restoreBtn);
+
+        // Show delete button only if current user is creator
+        if (presence.userId && item.creatorUid === presence.userId) {
+            const deleteBtn = createSafeElement('button', 'text-btn', 'delete');
+            deleteBtn.style.padding = '2px 6px';
+            deleteBtn.style.fontSize = '0.75rem';
+            deleteBtn.style.margin = '0';
+            deleteBtn.style.color = 'var(--accent)';
+            deleteBtn.addEventListener('click', () => {
+                this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'soft_click');
+                presence.removeMemory(item.id);
+            });
+            actionsDiv.appendChild(deleteBtn);
+        }
+
+        itemDiv.appendChild(actionsDiv);
         frag.appendChild(itemDiv);
     });
     listEl.appendChild(frag);

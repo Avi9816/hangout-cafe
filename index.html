@@ -169,6 +169,23 @@
     <input type="text" id="note-input" class="ethereal-input" placeholder="whisper a midnight thought..." maxlength="120" style="margin-bottom: 24px;" aria-label="Your thought">
     <button class="text-btn" id="btn-post-note">pin to the wall</button>
     <div id="the-wall" aria-live="polite"></div>
+  <section class="cinematic-space" id="room-memory-section" style="display: block;" aria-label="Room Activity and Memories">
+    <div style="display: flex; gap: 40px; text-align: left; justify-content: space-between; flex-wrap: wrap; margin-top: 40px;">
+      <!-- Recent Room Activity -->
+      <div style="flex: 1; min-width: 280px; max-width: 48%;">
+        <h2 style="opacity: 0.7; font-size: 1.5rem; margin-bottom: 8px;">Recently left behind</h2>
+        <p class="subtitle" style="margin-bottom: 24px; opacity: 0.5; font-size: 0.9rem;">Chronological ambient activities</p>
+        <div id="room-history-list" style="display: flex; flex-direction: column; gap: 10px; max-height: 300px; overflow-y: auto; padding-right: 8px; border: 1px solid rgba(255,255,255,0.03); padding: 12px; background: rgba(0,0,0,0.1); border-radius: 6px;"></div>
+      </div>
+      
+      <!-- Persistent Memories -->
+      <div style="flex: 1; min-width: 280px; max-width: 48%;">
+        <h2 style="opacity: 0.7; font-size: 1.5rem; margin-bottom: 8px;">This room remembers...</h2>
+        <p class="subtitle" style="margin-bottom: 24px; opacity: 0.5; font-size: 0.9rem;">Pinned memories</p>
+        <div id="last-tape-played" style="margin-bottom: 16px; font-size: 0.85rem; opacity: 0.8; font-style: italic; color: var(--accent); display: none;"></div>
+        <div id="room-memories-list" style="display: flex; flex-direction: column; gap: 10px; max-height: 300px; overflow-y: auto; padding-right: 8px; border: 1px solid rgba(255,255,255,0.03); padding: 12px; background: rgba(0,0,0,0.1); border-radius: 6px;"></div>
+      </div>
+    </div>
   </section>
 
 </main>

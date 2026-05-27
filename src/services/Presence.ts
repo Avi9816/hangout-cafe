@@ -3,7 +3,7 @@ import { APP_EVENTS } from '../core/events';
 import { LifecycleManager } from '../core/Lifecycle';
 import { db, initFirebase } from '../config/firebase';
 import { doc, setDoc, getDoc, onSnapshot, Unsubscribe, updateDoc, deleteField, collection, addDoc, query, orderBy, limit, getDocs, deleteDoc, runTransaction } from 'firebase/firestore';
-import { UserProfile, Note, MemoryObject, QueueItem } from '../types';
+import { UserProfile, Note, MemoryObject, QueueItem, RoomHistoryEvent, RoomMemory } from '../types';
 import { $ } from '../utils/dom'; 
 import { debounce as debounceUtil } from '../utils/timing';
 import { devLog } from '../utils/logger';
@@ -39,6 +39,10 @@ export class SharedPresence {
   useSubcollectionPresence = false;
   unsubQueue: Unsubscribe | null = null;
   queue: QueueItem[] = [];
+  unsubHistory: Unsubscribe | null = null;
+  unsubMemories: Unsubscribe | null = null;
+  history: RoomHistoryEvent[] = [];
+  memories: RoomMemory[] = [];
   joinedAt = 0;
   
   pendingJoin: { room: string, theme: string | null } | null = null;
@@ -84,6 +88,10 @@ export class SharedPresence {
         this.debouncedSyncNotes(this.notes);
         this.broadcastActivity(`${this.profile?.alias || 'wanderer'} pinned a note`, '📌');
 
+        const alias = this.profile?.alias || 'wanderer';
+        const truncatedText = note.text.substring(0, 30) + (note.text.length > 30 ? '...' : '');
+        this.addHistoryEvent('note_pinned', `${alias} pinned a note: "${truncatedText}"`);
+
         if(db && this.roomCode) {
             const notesCol = collection(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'notes');
             addDoc(notesCol, {
@@ -102,6 +110,9 @@ export class SharedPresence {
         if(this.objects.length > 20) this.objects.pop();
         this.debouncedSyncObjects(this.objects);
         this.broadcastActivity(`${this.profile?.alias || 'wanderer'} placed a ${obj.label}`, obj.emoji);
+
+        const alias = this.profile?.alias || 'wanderer';
+        this.addHistoryEvent('object_placed', `${alias} placed a ${obj.label}`);
 
         if(db && this.roomCode) {
             const objectsCol = collection(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'objects');
@@ -148,6 +159,10 @@ export class SharedPresence {
                     } 
                 }, { merge: true });
                 
+                if (isUrlChanging) {
+                    const tapeTitle = data.title || 'unnamed tape';
+                    this.addHistoryEvent('tape_played', `Started playing tape "${tapeTitle}"`);
+                }
                 if (isUrlChanging && data.type === 'magnet') {
                     this.broadcastActivity(`${this.profile?.alias || 'wanderer'} started a tape`, '📼');
                 }
@@ -267,7 +282,11 @@ export class SharedPresence {
     if (this.unsubObjects) { this.unsubObjects(); this.unsubObjects = null; }
     if (this.unsubPresence) { this.unsubPresence(); this.unsubPresence = null; }
     if (this.unsubQueue) { this.unsubQueue(); this.unsubQueue = null; }
+    if (this.unsubHistory) { this.unsubHistory(); this.unsubHistory = null; }
+    if (this.unsubMemories) { this.unsubMemories(); this.unsubMemories = null; }
     this.queue = [];
+    this.history = [];
+    this.memories = [];
 
     const ref = doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode);
     updateDoc(ref, {
@@ -289,7 +308,11 @@ export class SharedPresence {
     }
 
     if (this.unsubQueue) { this.unsubQueue(); this.unsubQueue = null; }
+    if (this.unsubHistory) { this.unsubHistory(); this.unsubHistory = null; }
+    if (this.unsubMemories) { this.unsubMemories(); this.unsubMemories = null; }
     this.queue = [];
+    this.history = [];
+    this.memories = [];
     this.joinedAt = Date.now();
 
     this.roomCode = roomKey; this.ghostUsers = {}; this.activeUsers = {}; this.lastActionTimestamp = 0;
@@ -299,16 +322,28 @@ export class SharedPresence {
 
     devLog('[DEBUG_JOIN_ROOM] userId = ' + this.userId + ', dbExists = ' + !!db + ', isPublic = ' + isPublic + ', theme = ' + theme);
     if(!this.userId || !db) return;
-    if(!isPublic && theme) {
-        devLog('[THEME_SAVED]', theme);
-        console.log('[FIRESTORE_ROOM_WRITE] private room metadata write start:', { roomKey, theme });
-        setDoc(doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', roomKey), { theme }, { merge: true })
-          .then(() => console.log('[FIRESTORE_ROOM_WRITE] private room metadata write SUCCESS'))
-          .catch(err => console.error('[FIRESTORE_ROOM_WRITE] private room metadata write ERROR:', err));
-    }
-    this.updatePresence(); 
-    this.listenToRoom();
-    this.broadcastActivity(`${this.profile?.alias || 'wanderer'} entered the corner`, '🚪');
+    
+    const roomRef = doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', roomKey);
+    getDoc(roomRef).then(async (snap) => {
+        if (!snap.exists()) {
+            const initialTheme = theme || (isPublic ? roomKey : 'window-seat');
+            await setDoc(roomRef, { theme: initialTheme }, { merge: true });
+            this.addHistoryEvent('room_created', `Room created with theme "${initialTheme}"`);
+        } else {
+            if (!isPublic && theme) {
+                devLog('[THEME_SAVED]', theme);
+                await setDoc(roomRef, { theme }, { merge: true }).catch(err => console.error('[FIRESTORE_ROOM_WRITE] private room metadata write ERROR:', err));
+            }
+        }
+        this.updatePresence(); 
+        this.listenToRoom();
+        this.broadcastActivity(`${this.profile?.alias || 'wanderer'} entered the corner`, '🚪');
+    }).catch(err => {
+        console.error('[ROOM_HISTORY] Error checking room creation:', err);
+        this.updatePresence(); 
+        this.listenToRoom();
+        this.broadcastActivity(`${this.profile?.alias || 'wanderer'} entered the corner`, '🚪');
+    });
   }
 
   updatePresence() {
@@ -402,6 +437,7 @@ export class SharedPresence {
                 this.bus.emit(APP_EVENTS.REMOTE_MEDIA_UPDATED, data.video);
                 setTimeout(() => this.isRemoteUpdate = false, 1500);
             }
+            this.checkHostContinuity();
         } else {
             this.currentVideoState = null;
             const hostEl = $('local-host');
@@ -514,51 +550,7 @@ export class SharedPresence {
         this.renderPresenceUI();
 
         // Host Continuity Check
-        if (this.currentVideoState && this.currentVideoState.hostId) {
-            const currentHostId = this.currentVideoState.hostId;
-            if (!this.activeUsers[currentHostId]) {
-                devLog('[HOST_CONTINUITY] Current host has departed:', currentHostId);
-                const activeEntries = Object.entries(this.activeUsers);
-                if (activeEntries.length > 0) {
-                    activeEntries.sort((a, b) => {
-                        const joinedA = a[1].joinedAt || 0;
-                        const joinedB = b[1].joinedAt || 0;
-                        if (joinedA !== joinedB) return joinedA - joinedB;
-                        return a[0].localeCompare(b[0]);
-                    });
-                    const oldestUid = activeEntries[0][0];
-                    devLog('[HOST_CONTINUITY] Oldest active participant is:', oldestUid);
-                    
-                    if (oldestUid === this.userId) {
-                        devLog('[HOST_CONTINUITY] We are the oldest active participant. Initiating takeover...');
-                        const fs = db;
-                        if (fs) {
-                            const roomRef = doc(fs, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode!);
-                            runTransaction(fs, async (transaction) => {
-                                const roomDoc = await transaction.get(roomRef);
-                                if (roomDoc.exists()) {
-                                    const currentVideo = roomDoc.data().video;
-                                    if (currentVideo && currentVideo.hostId === currentHostId) {
-                                        devLog('[HOST_CONTINUITY] Takeover conditions met. Claiming host authority...');
-                                        transaction.update(roomRef, {
-                                            'video.hostId': this.userId,
-                                            'video.host': this.profile?.alias || 'wanderer',
-                                            'video.sender': this.userId
-                                        });
-                                    } else {
-                                        devLog('[HOST_CONTINUITY] Takeover aborted: hostId already changed.');
-                                    }
-                                }
-                            }).then(() => {
-                                devLog('[HOST_CONTINUITY] Takeover transaction completed successfully.');
-                            }).catch(err => {
-                                console.error('[HOST_CONTINUITY] Takeover transaction failed:', err);
-                            });
-                        }
-                    }
-                }
-            }
-        }
+        this.checkHostContinuity();
       } else {
         if (this.useSubcollectionPresence) {
             this.activeUsers = {};
@@ -588,6 +580,48 @@ export class SharedPresence {
       this.bus.emit(APP_EVENTS.SYNC_QUEUE, this.queue);
     }, (err) => {
       console.error('[DEBUG_LISTEN_ROOM] Queue snapshot error:', err);
+    });
+
+    const historyCol = collection(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'history');
+    const historyQuery = query(historyCol, orderBy('createdAt', 'desc'), limit(50));
+    this.unsubHistory = onSnapshot(historyQuery, (snap) => {
+      const historyList = snap.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          type: data.type || 'room_created',
+          text: data.text || '',
+          createdAt: data.createdAt || 0,
+          createdBy: data.createdBy || 'wanderer'
+        } as RoomHistoryEvent;
+      });
+      devLog('[HISTORY_SYNC] Realtime history update received. Count:', historyList.length);
+      this.history = historyList;
+      this.bus.emit(APP_EVENTS.SYNC_HISTORY, historyList);
+    }, (err) => {
+      console.error('[DEBUG_LISTEN_ROOM] History snapshot error:', err);
+    });
+
+    const memoriesCol = collection(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'memories');
+    const memoriesQuery = query(memoriesCol, orderBy('createdAt', 'desc'), limit(100));
+    this.unsubMemories = onSnapshot(memoriesQuery, (snap) => {
+      this.memories = snap.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          type: data.type || 'moment',
+          title: data.title || '',
+          description: data.description || '',
+          createdAt: data.createdAt || 0,
+          createdBy: data.createdBy || 'wanderer',
+          creatorUid: data.creatorUid || '',
+          payload: data.payload || null
+        } as RoomMemory;
+      });
+      devLog('[MEMORIES_SYNC] Realtime memories update received. Count:', this.memories.length);
+      this.bus.emit(APP_EVENTS.SYNC_MEMORIES, this.memories);
+    }, (err) => {
+      console.error('[DEBUG_LISTEN_ROOM] Memories snapshot error:', err);
     });
   }
 
@@ -658,7 +692,9 @@ export class SharedPresence {
               host: this.profile?.alias || 'wanderer',
               sender: this.userId
           }
-      }, { merge: true }).catch(err => console.error('[QUEUE_OPERATION] Error updating root video state:', err));
+      }, { merge: true }).then(() => {
+          this.addHistoryEvent('tape_played', `Started playing queued tape "${targetItem.title}"`);
+      }).catch(err => console.error('[QUEUE_OPERATION] Error updating root video state:', err));
   }
 
   async playNextInQueue() {
@@ -697,7 +733,9 @@ export class SharedPresence {
                   host: this.profile?.alias || 'wanderer',
                   sender: this.userId
               }
-          }, { merge: true }).catch(err => console.error('[QUEUE_OPERATION] Error updating root video state:', err));
+          }, { merge: true }).then(() => {
+              this.addHistoryEvent('tape_played', `Queue auto-advanced to "${nextItem.title}"`);
+          }).catch(err => console.error('[QUEUE_OPERATION] Error updating root video state:', err));
       } else {
           devLog('[QUEUE_OPERATION] No pending items left in queue. Clearing root video.');
           const ref = doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode);
@@ -706,4 +744,111 @@ export class SharedPresence {
           }).catch(err => console.error('[QUEUE_OPERATION] Error clearing root video:', err));
       }
   }
+
+  checkHostContinuity() {
+      if (!this.userId || !db || !this.roomCode) return;
+      if (this.currentVideoState && this.currentVideoState.hostId) {
+          const currentHostId = this.currentVideoState.hostId;
+          if (!this.activeUsers[currentHostId]) {
+              devLog('[HOST_CONTINUITY] Current host has departed:', currentHostId);
+              const activeEntries = Object.entries(this.activeUsers);
+              if (activeEntries.length > 0) {
+                  activeEntries.sort((a, b) => {
+                      const joinedA = a[1].joinedAt || 0;
+                      const joinedB = b[1].joinedAt || 0;
+                      if (joinedA !== joinedB) return joinedA - joinedB;
+                      return a[0].localeCompare(b[0]);
+                  });
+                  const oldestUid = activeEntries[0][0];
+                  devLog('[HOST_CONTINUITY] Oldest active participant is:', oldestUid);
+                  
+                  if (oldestUid === this.userId) {
+                      devLog('[HOST_CONTINUITY] We are the oldest active participant. Initiating takeover...');
+                      const fs = db;
+                      const roomRef = doc(fs, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode);
+                      runTransaction(fs, async (transaction) => {
+                          const roomDoc = await transaction.get(roomRef);
+                          if (roomDoc.exists()) {
+                              const currentVideo = roomDoc.data().video;
+                              if (currentVideo && currentVideo.hostId === currentHostId) {
+                                  devLog('[HOST_CONTINUITY] Takeover conditions met. Claiming host authority...');
+                                  transaction.update(roomRef, {
+                                      'video.hostId': this.userId,
+                                      'video.host': this.profile?.alias || 'wanderer',
+                                      'video.sender': this.userId
+                                  });
+                              } else {
+                                  devLog('[HOST_CONTINUITY] Takeover aborted: hostId already changed.');
+                              }
+                          }
+                      }).then(() => {
+                          devLog('[HOST_CONTINUITY] Takeover transaction completed successfully.');
+                          this.addHistoryEvent('host_changed', `Host authority transferred to ${this.profile?.alias || 'wanderer'}`);
+                      }).catch(err => {
+                          console.error('[HOST_CONTINUITY] Takeover transaction failed:', err);
+                      });
+                  }
+              }
+          }
+      }
+  }
+
+  async addHistoryEvent(type: 'tape_played' | 'note_pinned' | 'object_placed' | 'host_changed' | 'room_created', text: string) {
+      if (!this.userId || !db || !this.roomCode) return;
+      devLog('[ROOM_HISTORY] Writing history event:', type, text);
+      const historyCol = collection(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'history');
+      await addDoc(historyCol, {
+          type,
+          text,
+          createdAt: Date.now(),
+          createdBy: this.profile?.alias || 'wanderer'
+      }).catch(err => {
+          console.error('[ROOM_HISTORY] Error writing history event:', err);
+      });
+  }
+
+  async saveMemory(memory: Omit<RoomMemory, 'id' | 'createdAt' | 'createdBy' | 'creatorUid'>) {
+      if (!this.userId || !db || !this.roomCode) return;
+      devLog('[ROOM_MEMORIES] Saving memory:', memory);
+      const memoriesCol = collection(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'memories');
+      await addDoc(memoriesCol, {
+          type: memory.type,
+          title: memory.title,
+          description: memory.description || '',
+          createdAt: Date.now(),
+          createdBy: this.profile?.alias || 'wanderer',
+          creatorUid: this.userId,
+          payload: memory.payload
+      }).catch(err => console.error('[ROOM_MEMORIES] Error saving memory:', err));
+  }
+
+  async removeMemory(memoryId: string) {
+      if (!this.userId || !db || !this.roomCode) return;
+      devLog('[ROOM_MEMORIES] Removing memory:', memoryId);
+      const memoryRef = doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'memories', memoryId);
+      await deleteDoc(memoryRef).catch(err => console.error('[ROOM_MEMORIES] Error removing memory:', err));
+  }
+
+  async loadRoomMemories(): Promise<RoomMemory[]> {
+      if (!this.userId || !db || !this.roomCode) return [];
+      if (this.memories && this.memories.length > 0) return this.memories;
+      const memoriesCol = collection(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'memories');
+      const q = query(memoriesCol, orderBy('createdAt', 'desc'));
+      const snap = await getDocs(q).catch(() => null);
+      if (!snap) return [];
+      return snap.docs.map(doc => {
+          const data = doc.data();
+          return {
+              id: doc.id,
+              type: data.type || '',
+              title: data.title || '',
+              description: data.description || '',
+              createdAt: data.createdAt || 0,
+              createdBy: data.createdBy || 'wanderer',
+              creatorUid: data.creatorUid || '',
+              payload: data.payload || null
+          } as RoomMemory;
+      });
+  }
 }
+
