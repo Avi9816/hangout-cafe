@@ -33,6 +33,8 @@ export class SharedPresence {
   lastActionTimestamp = 0;
   unsubNotes: Unsubscribe | null = null;
   useSubcollectionNotes = false;
+  unsubObjects: Unsubscribe | null = null;
+  useSubcollectionObjects = false;
   
   pendingJoin: { room: string, theme: string | null } | null = null;
   sessionStart = Date.now();
@@ -95,6 +97,18 @@ export class SharedPresence {
         if(this.objects.length > 20) this.objects.pop();
         this.debouncedSyncObjects(this.objects);
         this.broadcastActivity(`${this.profile?.alias || 'wanderer'} placed a ${obj.label}`, obj.emoji);
+
+        if(db && this.roomCode) {
+            const objectsCol = collection(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'objects');
+            addDoc(objectsCol, {
+                emoji: obj.emoji,
+                label: obj.label,
+                author: obj.author,
+                id: obj.id,
+                isMythic: obj.isMythic || false,
+                createdAt: Date.now()
+            }).catch(err => console.error('[FIRESTORE_SUBCOL_WRITE] Error writing subcol object:', err));
+        }
     });
 
     this.bus.on(APP_EVENTS.ROOM_JOIN_REQUEST, (data: any) => {
@@ -275,7 +289,9 @@ export class SharedPresence {
     }
     if(this.unsub) { this.unsub(); this.unsub = null; }
     if(this.unsubNotes) { this.unsubNotes(); this.unsubNotes = null; }
+    if(this.unsubObjects) { this.unsubObjects(); this.unsubObjects = null; }
     this.useSubcollectionNotes = false;
+    this.useSubcollectionObjects = false;
 
     const docPath = `artifacts/${this.appId}/public/data/rooms/${this.roomCode}`;
     console.log('[DEBUG_LISTEN_ROOM] Subscribing to path:', docPath, 'uid:', this.userId, 'room:', this.roomCode);
@@ -310,10 +326,13 @@ export class SharedPresence {
             this.bus.emit(APP_EVENTS.REMOTE_NOTES_UPDATED, this.notes);
         }
 
-        this.objects = data.objects || [];
-        console.log('[DEBUG_LISTEN_ROOM] snap objects.length =', this.objects.length);
-        console.log('[DEBUG_LISTEN_ROOM] Emitting REMOTE_OBJECTS_UPDATED');
-        this.bus.emit(APP_EVENTS.REMOTE_OBJECTS_UPDATED, this.objects);
+        // Dual-read logic: fallback to legacy array only when subcollection is empty/not active
+        if (!this.useSubcollectionObjects) {
+            this.objects = data.objects || [];
+            console.log('[DEBUG_LISTEN_ROOM] snap legacy objects.length =', this.objects.length);
+            console.log('[DEBUG_LISTEN_ROOM] Emitting REMOTE_OBJECTS_UPDATED (legacy)');
+            this.bus.emit(APP_EVENTS.REMOTE_OBJECTS_UPDATED, this.objects);
+        }
         
         if(data.state && data.state.spotify) this.bus.emit(APP_EVENTS.REMOTE_MEDIA_UPDATED, { type: 'spotify', url: data.state.spotify, host: data.state.spotifyHost });
 
@@ -389,6 +408,36 @@ export class SharedPresence {
       }
     }, (err) => {
       console.error('[DEBUG_LISTEN_ROOM] Subcollection notes snapshot error:', err);
+    });
+
+    const objectsCol = collection(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'objects');
+    const objectsQuery = query(objectsCol, orderBy('createdAt', 'desc'), limit(20));
+    
+    this.unsubObjects = onSnapshot(objectsQuery, (subcolSnap) => {
+      console.log('[DEBUG_LISTEN_ROOM] Subcollection objects snapshot fired! empty:', subcolSnap.empty);
+      if (!subcolSnap.empty) {
+        this.useSubcollectionObjects = true;
+        this.objects = subcolSnap.docs.map(doc => {
+            const data = doc.data();
+            return {
+                emoji: data.emoji || '',
+                label: data.label || '',
+                author: data.author || 'wanderer',
+                id: data.id || 0,
+                isMythic: data.isMythic || false
+            } as MemoryObject;
+        });
+        console.log('[DEBUG_LISTEN_ROOM] snap subcol objects.length =', this.objects.length);
+        console.log('[DEBUG_LISTEN_ROOM] Emitting REMOTE_OBJECTS_UPDATED (subcollection)');
+        this.bus.emit(APP_EVENTS.REMOTE_OBJECTS_UPDATED, this.objects);
+      } else {
+        if (this.useSubcollectionObjects) {
+            this.objects = [];
+            this.bus.emit(APP_EVENTS.REMOTE_OBJECTS_UPDATED, this.objects);
+        }
+      }
+    }, (err) => {
+      console.error('[DEBUG_LISTEN_ROOM] Subcollection objects snapshot error:', err);
     });
   }
 
