@@ -2,7 +2,7 @@ import { EventBus } from '../core/EventBus';
 import { APP_EVENTS } from '../core/events';
 import { LifecycleManager } from '../core/Lifecycle';
 import { db, initFirebase } from '../config/firebase';
-import { doc, setDoc, getDoc, onSnapshot, Unsubscribe, updateDoc, deleteField, collection, addDoc, query, orderBy, limit, getDocs } from 'firebase/firestore';
+import { doc, setDoc, getDoc, onSnapshot, Unsubscribe, updateDoc, deleteField, collection, addDoc, query, orderBy, limit, getDocs, deleteDoc } from 'firebase/firestore';
 import { UserProfile, Note, MemoryObject } from '../types';
 import { $ } from '../utils/dom'; 
 import { debounce as debounceUtil } from '../utils/timing';
@@ -35,6 +35,8 @@ export class SharedPresence {
   useSubcollectionNotes = false;
   unsubObjects: Unsubscribe | null = null;
   useSubcollectionObjects = false;
+  unsubPresence: Unsubscribe | null = null;
+  useSubcollectionPresence = false;
   
   pendingJoin: { room: string, theme: string | null } | null = null;
   sessionStart = Date.now();
@@ -67,7 +69,7 @@ export class SharedPresence {
         window.addEventListener('beforeunload', () => this.leaveRoom());
         window.addEventListener('pagehide', () => this.leaveRoom());
         (window as any).presence = this;
-        (window as any)._firestore = { doc, getDoc, collection, getDocs };
+        (window as any)._firestore = { doc, getDoc, collection, getDocs, deleteDoc };
     }
   }
 
@@ -246,6 +248,9 @@ export class SharedPresence {
     updateDoc(ref, {
         [`presence.${this.userId}`]: deleteField()
     }).catch(err => console.warn("Failed to clean up presence on leaveRoom:", err));
+
+    const presDocRef = doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'presence', this.userId);
+    deleteDoc(presDocRef).catch(err => console.warn("Failed to delete presence doc on leaveRoom:", err));
   }
 
   joinRoom(roomKey: string, theme: string | null = null) {
@@ -280,6 +285,14 @@ export class SharedPresence {
     setDoc(doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode), { presence: { [this.userId]: { alias: this.profile.alias, time: Date.now() } } }, { merge: true })
       .then(() => console.log('[FIRESTORE_ROOM_WRITE] updatePresence SUCCESS'))
       .catch(err => console.error('[FIRESTORE_ROOM_WRITE] updatePresence ERROR:', err));
+
+    const presDocRef = doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'presence', this.userId);
+    setDoc(presDocRef, {
+        alias: this.profile.alias,
+        mood: this.profile.mood || 'resting quietly',
+        time: Date.now(),
+        uid: this.userId
+    }).catch(err => console.error('[FIRESTORE_SUBCOL_WRITE] Error writing subcol presence:', err));
   }
 
   listenToRoom() {
@@ -290,8 +303,10 @@ export class SharedPresence {
     if(this.unsub) { this.unsub(); this.unsub = null; }
     if(this.unsubNotes) { this.unsubNotes(); this.unsubNotes = null; }
     if(this.unsubObjects) { this.unsubObjects(); this.unsubObjects = null; }
+    if(this.unsubPresence) { this.unsubPresence(); this.unsubPresence = null; }
     this.useSubcollectionNotes = false;
     this.useSubcollectionObjects = false;
+    this.useSubcollectionPresence = false;
 
     const docPath = `artifacts/${this.appId}/public/data/rooms/${this.roomCode}`;
     console.log('[DEBUG_LISTEN_ROOM] Subscribing to path:', docPath, 'uid:', this.userId, 'room:', this.roomCode);
@@ -361,18 +376,21 @@ export class SharedPresence {
             }
         }
         
-        if(data.presence) {
-          const now = Date.now();
-          this.activeUsers = {};
-          Object.entries(data.presence).forEach(([id, p]: [string, any]) => {
-              if(now - p.time < 60000) this.activeUsers[id] = p;
-          });
-          this.bus.emit(APP_EVENTS.USER_COUNT_UPDATED, Object.keys(this.activeUsers).length);
-        } else {
-          this.activeUsers = {};
-          this.bus.emit(APP_EVENTS.USER_COUNT_UPDATED, 0);
+        // Dual-read logic: fallback to legacy presence only when subcollection is empty/not active
+        if (!this.useSubcollectionPresence) {
+            if(data.presence) {
+              const now = Date.now();
+              this.activeUsers = {};
+              Object.entries(data.presence).forEach(([id, p]: [string, any]) => {
+                  if(now - p.time < 60000) this.activeUsers[id] = p;
+              });
+              this.bus.emit(APP_EVENTS.USER_COUNT_UPDATED, Object.keys(this.activeUsers).length);
+            } else {
+              this.activeUsers = {};
+              this.bus.emit(APP_EVENTS.USER_COUNT_UPDATED, 0);
+            }
+            this.renderPresenceUI();
         }
-        this.renderPresenceUI();
       } else {
           this.bus.emit(APP_EVENTS.REMOTE_NOTES_UPDATED, []);
           this.bus.emit(APP_EVENTS.REMOTE_OBJECTS_UPDATED, []);
@@ -438,6 +456,35 @@ export class SharedPresence {
       }
     }, (err) => {
       console.error('[DEBUG_LISTEN_ROOM] Subcollection objects snapshot error:', err);
+    });
+
+    const presenceCol = collection(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'presence');
+    this.unsubPresence = onSnapshot(presenceCol, (subcolSnap) => {
+      console.log('[DEBUG_LISTEN_ROOM] Subcollection presence snapshot fired! empty:', subcolSnap.empty);
+      if (!subcolSnap.empty) {
+        this.useSubcollectionPresence = true;
+        const now = Date.now();
+        this.activeUsers = {};
+        subcolSnap.docs.forEach(doc => {
+            const p = doc.data();
+            if (now - p.time < 60000) {
+                this.activeUsers[p.uid || doc.id] = {
+                    alias: p.alias || 'wanderer',
+                    time: p.time
+                };
+            }
+        });
+        this.bus.emit(APP_EVENTS.USER_COUNT_UPDATED, Object.keys(this.activeUsers).length);
+        this.renderPresenceUI();
+      } else {
+        if (this.useSubcollectionPresence) {
+            this.activeUsers = {};
+            this.bus.emit(APP_EVENTS.USER_COUNT_UPDATED, 0);
+            this.renderPresenceUI();
+        }
+      }
+    }, (err) => {
+      console.error('[DEBUG_LISTEN_ROOM] Subcollection presence snapshot error:', err);
     });
   }
 
