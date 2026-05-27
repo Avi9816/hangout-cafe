@@ -541,6 +541,7 @@ export class SharedPresence {
             if (now - p.time < 60000) {
                 this.activeUsers[p.uid || doc.id] = {
                     alias: p.alias || 'wanderer',
+                    mood: p.mood || 'resting quietly',
                     time: p.time,
                     joinedAt: p.joinedAt || p.time
                 };
@@ -637,11 +638,45 @@ export class SharedPresence {
     
     if (count > 0) {
         const hostId = this.currentVideoState?.hostId;
-        const formattedUsers = activeEntries.map(([uid, u]: [string, any]) => {
+        const frag = document.createDocumentFragment();
+        
+        activeEntries.forEach(([uid, u]: [string, any]) => {
             const isHost = hostId && uid === hostId;
-            return isHost ? `${u.alias} (📼 host)` : u.alias;
+            
+            const userPill = document.createElement('div');
+            userPill.className = 'presence-user-pill';
+            
+            const dot = document.createElement('span');
+            dot.className = 'presence-dot';
+            dot.style.background = isHost ? 'var(--accent)' : '#4ade80';
+            dot.style.boxShadow = isHost ? '0 0 8px var(--accent)' : '0 0 8px #4ade80';
+            userPill.appendChild(dot);
+            
+            const nameSpan = document.createElement('span');
+            nameSpan.textContent = u.alias;
+            nameSpan.style.fontWeight = '500';
+            userPill.appendChild(nameSpan);
+
+            if (isHost) {
+                const badge = document.createElement('span');
+                badge.className = 'badge-host';
+                badge.textContent = 'host';
+                userPill.appendChild(badge);
+            }
+
+            if (u.mood) {
+                const moodSpan = document.createElement('span');
+                moodSpan.style.opacity = '0.5';
+                moodSpan.style.fontSize = '0.7rem';
+                moodSpan.style.marginLeft = '6px';
+                moodSpan.style.fontStyle = 'italic';
+                moodSpan.textContent = `(${u.mood})`;
+                userPill.appendChild(moodSpan);
+            }
+
+            frag.appendChild(userPill);
         });
-        presList.textContent = `currently here: ${formattedUsers.join(' · ')}`;
+        presList.appendChild(frag);
     }
   }
 

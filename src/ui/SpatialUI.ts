@@ -4,6 +4,18 @@ import { Note, MemoryObject, QueueItem, RoomHistoryEvent, RoomMemory } from '../
 import { $, $$, createSafeElement } from '../utils/dom';
 import { devLog } from '../utils/logger';
 
+function formatTimeAgo(timestamp: number): string {
+    const seconds = Math.floor((Date.now() - timestamp) / 1000);
+    if (seconds < 10) return 'just now';
+    if (seconds < 60) return `${seconds}s ago`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+}
+
 export class SpatialUI {
   private bus: EventBus;
   
@@ -259,8 +271,38 @@ export class SpatialUI {
         }
     }
 
+    const hostInfo = $('queue-host-info');
+    const viewerStatus = $('queue-viewer-status');
+    const controlMessage = $('queue-control-message');
+
+    // Update current host info
+    if (hostInfo) {
+        if (presence.currentVideoState && presence.currentVideoState.host) {
+            hostInfo.textContent = `host: ${presence.currentVideoState.host}`;
+        } else {
+            hostInfo.textContent = `host: none`;
+        }
+    }
+
+    // Toggle viewer status and control message
+    if (viewerStatus) {
+        viewerStatus.style.display = isHost ? 'none' : 'flex';
+    }
+    if (controlMessage) {
+        if (isHost) {
+            controlMessage.innerHTML = '✨ <span>you are the host. you can play queued tapes and skip playing media.</span>';
+            controlMessage.style.color = '#4ade80';
+            controlMessage.style.opacity = '0.7';
+        } else {
+            controlMessage.innerHTML = '🔒 <span>only the host can control tape playback and advance the queue.</span>';
+            controlMessage.style.color = 'var(--text-muted)';
+            controlMessage.style.opacity = '0.4';
+        }
+        controlMessage.style.display = 'block';
+    }
+
     if (this.queue.length === 0) {
-        listEl.innerHTML = '<div style="opacity: 0.5; font-style: italic; font-size: 0.8rem;">queue is empty...</div>';
+        listEl.innerHTML = '<div style="opacity: 0.4; font-style: italic; font-size: 0.8rem; padding: 16px 0; text-align: center;">📼 no tapes queued. drag & drop a file or click above to queue a tape...</div>';
         return;
     }
 
@@ -270,36 +312,82 @@ export class SpatialUI {
         itemDiv.style.display = 'flex';
         itemDiv.style.justifyContent = 'space-between';
         itemDiv.style.alignItems = 'center';
-        itemDiv.style.padding = '8px 12px';
-        itemDiv.style.background = 'rgba(255,255,255,0.02)';
-        itemDiv.style.border = '1px solid rgba(255,255,255,0.04)';
-        itemDiv.style.borderRadius = '4px';
+        itemDiv.style.padding = '10px 14px';
+        itemDiv.style.borderRadius = '6px';
+        itemDiv.style.transition = 'all 0.3s ease';
+
+        if (item.status === 'playing') {
+            itemDiv.style.background = 'rgba(235, 94, 85, 0.05)';
+            itemDiv.style.border = '1px solid rgba(235, 94, 85, 0.2)';
+            itemDiv.style.boxShadow = '0 0 15px rgba(235, 94, 85, 0.05)';
+        } else if (item.status === 'completed') {
+            itemDiv.style.background = 'rgba(255,255,255,0.01)';
+            itemDiv.style.border = '1px solid rgba(255,255,255,0.02)';
+            itemDiv.style.opacity = '0.35';
+        } else {
+            itemDiv.style.background = 'rgba(255,255,255,0.02)';
+            itemDiv.style.border = '1px solid rgba(255,255,255,0.04)';
+        }
 
         const infoDiv = createSafeElement('div');
-        
-        let statusSymbol = '';
-        if (item.status === 'playing') statusSymbol = '▶';
-        else if (item.status === 'pending') statusSymbol = '⏳';
-        else if (item.status === 'completed') statusSymbol = '✓';
+        infoDiv.style.display = 'flex';
+        infoDiv.style.flexDirection = 'column';
+        infoDiv.style.gap = '4px';
 
-        const titleSpan = createSafeElement('span', '', `${statusSymbol} ${item.title} `);
-        titleSpan.style.fontWeight = item.status === 'playing' ? 'bold' : 'normal';
-        if (item.status === 'playing') titleSpan.style.color = 'var(--accent)';
-        
-        const metaSpan = createSafeElement('span', '', `(added by ${item.addedBy})`);
-        metaSpan.style.fontSize = '0.75rem';
-        metaSpan.style.opacity = '0.5';
-        metaSpan.style.marginLeft = '8px';
+        const titleRow = createSafeElement('div');
+        titleRow.style.display = 'flex';
+        titleRow.style.alignItems = 'center';
+        titleRow.style.gap = '8px';
 
-        infoDiv.appendChild(titleSpan);
+        let statusBadgeText = '';
+        let statusBadgeColor = '';
+        let statusBadgeBg = '';
+        
+        if (item.status === 'playing') {
+            statusBadgeText = 'playing';
+            statusBadgeColor = 'var(--accent)';
+            statusBadgeBg = 'rgba(235, 94, 85, 0.15)';
+        } else if (item.status === 'completed') {
+            statusBadgeText = 'finished';
+            statusBadgeColor = 'rgba(255,255,255,0.4)';
+            statusBadgeBg = 'rgba(255, 255, 255, 0.05)';
+        } else {
+            statusBadgeText = 'queued';
+            statusBadgeColor = '#f4d35e';
+            statusBadgeBg = 'rgba(244, 211, 94, 0.1)';
+        }
+
+        const statusBadge = createSafeElement('span', '', statusBadgeText);
+        statusBadge.style.fontSize = '0.65rem';
+        statusBadge.style.fontWeight = 'bold';
+        statusBadge.style.textTransform = 'uppercase';
+        statusBadge.style.letterSpacing = '0.5px';
+        statusBadge.style.color = statusBadgeColor;
+        statusBadge.style.background = statusBadgeBg;
+        statusBadge.style.padding = '1px 6px';
+        statusBadge.style.borderRadius = '3px';
+        titleRow.appendChild(statusBadge);
+
+        const titleSpan = createSafeElement('span', '', item.title);
+        titleSpan.style.fontWeight = item.status === 'playing' ? '600' : '400';
+        titleSpan.style.fontSize = '0.85rem';
+        if (item.status === 'playing') titleSpan.style.color = '#fff';
+        titleRow.appendChild(titleSpan);
+        infoDiv.appendChild(titleRow);
+
+        const metaSpan = createSafeElement('span', '', `added by ${item.addedBy}`);
+        metaSpan.style.fontSize = '0.7rem';
+        metaSpan.style.opacity = '0.4';
+        metaSpan.style.textTransform = 'lowercase';
         infoDiv.appendChild(metaSpan);
 
         if (item.status === 'playing') {
             const tapePinBtn = createSafeElement('button', 'text-btn', '📌 pin');
-            tapePinBtn.style.marginLeft = '12px';
             tapePinBtn.style.padding = '0';
-            tapePinBtn.style.fontSize = '0.75rem';
-            tapePinBtn.style.opacity = '0.4';
+            tapePinBtn.style.fontSize = '0.7rem';
+            tapePinBtn.style.opacity = '0.5';
+            tapePinBtn.style.margin = '0 0 0 10px';
+            tapePinBtn.style.display = 'inline-block';
             tapePinBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'soft_click');
@@ -316,7 +404,7 @@ export class SpatialUI {
                     });
                 }
             });
-            infoDiv.appendChild(tapePinBtn);
+            titleRow.appendChild(tapePinBtn);
         }
 
         itemDiv.appendChild(infoDiv);
@@ -325,18 +413,13 @@ export class SpatialUI {
         if (isHost && item.status === 'pending') {
             const startBtn = createSafeElement('button', 'text-btn', 'play now');
             startBtn.style.padding = '4px 8px';
-            startBtn.style.fontSize = '0.75rem';
+            startBtn.style.fontSize = '0.7rem';
             startBtn.style.margin = '0';
             startBtn.addEventListener('click', () => {
                 this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'soft_click');
                 presence.startQueuedMedia(item.id);
             });
             itemDiv.appendChild(startBtn);
-        } else {
-            const statusLabel = createSafeElement('span', '', item.status);
-            statusLabel.style.fontSize = '0.75rem';
-            statusLabel.style.opacity = '0.5';
-            itemDiv.appendChild(statusLabel);
         }
 
         frag.appendChild(itemDiv);
@@ -350,17 +433,24 @@ export class SpatialUI {
     listEl.innerHTML = '';
 
     if (this.history.length === 0) {
-        listEl.innerHTML = '<div style="opacity: 0.5; font-style: italic; font-size: 0.8rem;">no recent activity...</div>';
+        listEl.innerHTML = `
+            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; opacity: 0.4;">
+                <span style="font-size: 1.8rem; margin-bottom: 8px;">⏳</span>
+                <span style="font-size: 0.8rem; font-style: italic; font-family: var(--font-ui);">The air is still. No whispers have been left behind recently...</span>
+            </div>
+        `;
         return;
     }
 
     const frag = document.createDocumentFragment();
     this.history.forEach(item => {
         const itemDiv = createSafeElement('div');
-        itemDiv.style.fontSize = '0.8rem';
-        itemDiv.style.opacity = '0.7';
+        itemDiv.style.display = 'flex';
+        itemDiv.style.justifyContent = 'space-between';
+        itemDiv.style.alignItems = 'center';
+        itemDiv.style.fontSize = '0.75rem';
+        itemDiv.style.padding = '6px 0';
         itemDiv.style.borderBottom = '1px solid rgba(255,255,255,0.02)';
-        itemDiv.style.padding = '4px 0';
         
         let typeSymbol = '';
         if (item.type === 'tape_played') typeSymbol = '📼';
@@ -369,10 +459,16 @@ export class SpatialUI {
         else if (item.type === 'host_changed') typeSymbol = '👑';
         else if (item.type === 'room_created') typeSymbol = '🚪';
 
-        const timeString = new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const textSpan = createSafeElement('span', '', `${typeSymbol} ${item.text}`);
+        textSpan.style.opacity = '0.85';
         
-        const txtSpan = createSafeElement('span', '', `${typeSymbol} [${timeString}] ${item.text}`);
-        itemDiv.appendChild(txtSpan);
+        const timeSpan = createSafeElement('span', '', formatTimeAgo(item.createdAt));
+        timeSpan.style.fontSize = '0.65rem';
+        timeSpan.style.opacity = '0.4';
+        timeSpan.style.fontStyle = 'italic';
+        
+        itemDiv.appendChild(textSpan);
+        itemDiv.appendChild(timeSpan);
         frag.appendChild(itemDiv);
     });
     listEl.appendChild(frag);
@@ -386,7 +482,7 @@ export class SpatialUI {
                 .replace('Started playing tape ', '')
                 .replace('Queue auto-advanced to ', '')
                 .replace('Started playing queued tape ', '');
-            lastTapeDiv.textContent = `Last tape played: ${cleanText}`;
+            lastTapeDiv.textContent = `Last tape left playing: ${cleanText}`;
             lastTapeDiv.style.display = 'block';
         } else {
             lastTapeDiv.style.display = 'none';
@@ -403,7 +499,12 @@ export class SpatialUI {
     if (!presence) return;
 
     if (this.memories.length === 0) {
-        listEl.innerHTML = '<div style="opacity: 0.5; font-style: italic; font-size: 0.8rem;">no memories pinned...</div>';
+        listEl.innerHTML = `
+            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; opacity: 0.4;">
+                <span style="font-size: 1.8rem; margin-bottom: 8px;">📌</span>
+                <span style="font-size: 0.8rem; font-style: italic; font-family: var(--font-ui);">This room's walls are bare. Pin a note, object, or tape to build its memory...</span>
+            </div>
+        `;
         return;
     }
 
@@ -413,34 +514,67 @@ export class SpatialUI {
         itemDiv.style.display = 'flex';
         itemDiv.style.justifyContent = 'space-between';
         itemDiv.style.alignItems = 'center';
-        itemDiv.style.padding = '8px 12px';
-        itemDiv.style.background = 'rgba(255,255,255,0.02)';
+        itemDiv.style.padding = '10px 14px';
+        itemDiv.style.borderRadius = '6px';
+        itemDiv.style.marginBottom = '8px';
+        itemDiv.style.transition = 'all 0.3s ease';
+
+        let typeSymbol = '';
+        let leftBorderColor = '';
+        let rowBg = '';
+
+        if (item.type === 'tape') {
+            typeSymbol = '📼';
+            leftBorderColor = 'rgba(235, 94, 85, 0.6)'; // accent/rose
+            rowBg = 'rgba(235, 94, 85, 0.02)';
+        } else if (item.type === 'note') {
+            typeSymbol = '📌';
+            leftBorderColor = 'rgba(244, 211, 94, 0.6)'; // warm yellow
+            rowBg = 'rgba(244, 211, 94, 0.02)';
+        } else if (item.type === 'object') {
+            typeSymbol = '🧸';
+            leftBorderColor = 'rgba(74, 222, 128, 0.6)'; // green
+            rowBg = 'rgba(74, 222, 128, 0.02)';
+        } else {
+            typeSymbol = '⏳';
+            leftBorderColor = 'rgba(96, 165, 250, 0.6)'; // blue
+            rowBg = 'rgba(96, 165, 250, 0.02)';
+        }
+
+        itemDiv.style.background = rowBg;
         itemDiv.style.border = '1px solid rgba(255,255,255,0.04)';
-        itemDiv.style.borderRadius = '4px';
+        itemDiv.style.borderLeft = `4px solid ${leftBorderColor}`;
 
         const infoDiv = createSafeElement('div');
-        
-        let typeSymbol = '';
-        if (item.type === 'tape') typeSymbol = '📼';
-        else if (item.type === 'note') typeSymbol = '📌';
-        else if (item.type === 'object') typeSymbol = '🧸';
-        else if (item.type === 'moment') typeSymbol = '⏳';
+        infoDiv.style.display = 'flex';
+        infoDiv.style.flexDirection = 'column';
+        infoDiv.style.gap = '2px';
 
         const titleSpan = createSafeElement('span', '', `${typeSymbol} ${item.title}`);
-        titleSpan.style.fontWeight = '500';
+        titleSpan.style.fontWeight = '600';
+        titleSpan.style.fontSize = '0.85rem';
+        titleSpan.style.color = '#fff';
         
-        const descSpan = createSafeElement('span', '', ` — ${item.description || ''}`);
-        descSpan.style.fontSize = '0.75rem';
-        descSpan.style.opacity = '0.6';
+        const descRow = createSafeElement('div');
+        descRow.style.display = 'flex';
+        descRow.style.alignItems = 'center';
+        descRow.style.flexWrap = 'wrap';
+        descRow.style.gap = '6px';
+        descRow.style.fontSize = '0.72rem';
+        descRow.style.opacity = '0.5';
 
-        const creatorSpan = createSafeElement('span', '', ` (pinned by ${item.createdBy})`);
-        creatorSpan.style.fontSize = '0.7rem';
-        creatorSpan.style.opacity = '0.4';
-        creatorSpan.style.marginLeft = '6px';
+        const descSpan = createSafeElement('span', '', item.description || '');
+        const creatorSpan = createSafeElement('span', '', `by ${item.createdBy}`);
+        creatorSpan.style.opacity = '0.8';
+        const timeSpan = createSafeElement('span', '', `· ${formatTimeAgo(item.createdAt)}`);
+        timeSpan.style.fontSize = '0.65rem';
+
+        descRow.appendChild(descSpan);
+        descRow.appendChild(creatorSpan);
+        descRow.appendChild(timeSpan);
 
         infoDiv.appendChild(titleSpan);
-        infoDiv.appendChild(descSpan);
-        infoDiv.appendChild(creatorSpan);
+        infoDiv.appendChild(descRow);
         itemDiv.appendChild(infoDiv);
 
         // Actions: Restore / Delete

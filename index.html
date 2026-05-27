@@ -142,7 +142,14 @@
           <div id="wt-status" class="vhs-status" aria-live="polite"></div>
           <div id="local-video-container" class="ambient-embed"></div>
           <div id="vhs-queue-section" style="margin-top: 24px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 16px;">
-            <h4 style="opacity: 0.8; margin-bottom: 12px; font-family: var(--font-ui); font-size: 0.85rem; letter-spacing: 1px; text-transform: uppercase;">Tape Queue</h4>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+              <h4 style="opacity: 0.8; margin-bottom: 0; font-family: var(--font-ui); font-size: 0.85rem; letter-spacing: 1px; text-transform: uppercase;">Tape Queue</h4>
+              <span id="queue-host-info" style="font-size: 0.7rem; font-family: var(--font-ui); color: var(--accent); padding: 2px 8px; background: rgba(235, 94, 85, 0.1); border: 1px solid rgba(235, 94, 85, 0.2); border-radius: 10px; font-weight: 500; text-transform: lowercase;">host: none</span>
+            </div>
+            <div id="queue-viewer-status" style="font-size: 0.75rem; font-family: var(--font-ui); opacity: 0.5; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; text-transform: lowercase;">
+              <span style="font-size: 0.9rem;">👁️</span> <span>viewing room (read-only)</span>
+            </div>
+            <div id="queue-control-message" style="font-size: 0.7rem; font-family: var(--font-ui); font-style: italic; opacity: 0.4; margin-bottom: 12px; text-transform: lowercase; line-height: 1.4;"></div>
             <div id="vhs-queue-list" style="display: flex; flex-direction: column; gap: 8px;"></div>
           </div>
         </div>
@@ -169,6 +176,8 @@
     <input type="text" id="note-input" class="ethereal-input" placeholder="whisper a midnight thought..." maxlength="120" style="margin-bottom: 24px;" aria-label="Your thought">
     <button class="text-btn" id="btn-post-note">pin to the wall</button>
     <div id="the-wall" aria-live="polite"></div>
+  </section>
+
   <section class="cinematic-space" id="room-memory-section" style="display: block;" aria-label="Room Activity and Memories">
     <div style="display: flex; gap: 40px; text-align: left; justify-content: space-between; flex-wrap: wrap; margin-top: 40px;">
       <!-- Recent Room Activity -->
@@ -181,7 +190,7 @@
       <!-- Persistent Memories -->
       <div style="flex: 1; min-width: 280px; max-width: 48%;">
         <h2 style="opacity: 0.7; font-size: 1.5rem; margin-bottom: 8px;">This room remembers...</h2>
-        <p class="subtitle" style="margin-bottom: 24px; opacity: 0.5; font-size: 0.9rem;">Pinned memories</p>
+        <p class="subtitle" style="margin-bottom: 24px; opacity: 0.5; font-size: 0.9rem;">Pinned memories from previous visits</p>
         <div id="last-tape-played" style="margin-bottom: 16px; font-size: 0.85rem; opacity: 0.8; font-style: italic; color: var(--accent); display: none;"></div>
         <div id="room-memories-list" style="display: flex; flex-direction: column; gap: 10px; max-height: 300px; overflow-y: auto; padding-right: 8px; border: 1px solid rgba(255,255,255,0.03); padding: 12px; background: rgba(0,0,0,0.1); border-radius: 6px;"></div>
       </div>

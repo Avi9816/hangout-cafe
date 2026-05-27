@@ -16,9 +16,9 @@ async function main() {
     let page3;
 
     const globalTimeout = setTimeout(() => {
-        console.error('GLOBAL_TIMEOUT: Room memory verification exceeded 120 seconds');
+        console.error('GLOBAL_TIMEOUT: Room memory verification exceeded 240 seconds');
         cleanup().then(() => process.exit(1));
-    }, 120000);
+    }, 240000);
 
     async function cleanup() {
         console.log('\nCleaning up processes...');

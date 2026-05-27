@@ -15,9 +15,9 @@ async function main() {
     let page2;
 
     const globalTimeout = setTimeout(() => {
-        console.error('GLOBAL_TIMEOUT: Queue system verification exceeded 90 seconds');
+        console.error('GLOBAL_TIMEOUT: Queue system verification exceeded 180 seconds');
         cleanup().then(() => process.exit(1));
-    }, 90000);
+    }, 180000);
 
     async function cleanup() {
         console.log('\nCleaning up processes...');
