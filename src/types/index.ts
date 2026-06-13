@@ -64,10 +64,20 @@ export interface RoomHistoryEvent {
     | 'note_pinned'
     | 'object_placed'
     | 'host_changed'
-    | 'room_created';
+    | 'room_created'
+    | 'photo_added';
   text: string;
   createdAt: number;
   createdBy: string;
+}
+
+export interface RoomPhoto {
+  id: string;
+  url: string;
+  caption: string;
+  uploadedBy: string;
+  creatorUid: string;
+  createdAt: number;
 }
 
 export interface RoomMemory {

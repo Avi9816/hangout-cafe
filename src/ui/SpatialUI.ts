@@ -1,8 +1,9 @@
 import { EventBus } from '../core/EventBus';
 import { APP_EVENTS } from '../core/events';
-import { Note, MemoryObject, QueueItem, RoomHistoryEvent, RoomMemory } from '../types';
+import { Note, MemoryObject, QueueItem, RoomHistoryEvent, RoomMemory, RoomPhoto } from '../types';
 import { $, $$, createSafeElement } from '../utils/dom';
 import { devLog } from '../utils/logger';
+import { uploadPhoto } from '../services/Presence';
 
 function formatTimeAgo(timestamp: number): string {
     const seconds = Math.floor((Date.now() - timestamp) / 1000);
@@ -24,6 +25,7 @@ export class SpatialUI {
   queue: QueueItem[] = [];
   history: RoomHistoryEvent[] = [];
   memories: RoomMemory[] = [];
+  photos: RoomPhoto[] = [];
   
   elements: Record<string, HTMLElement | HTMLInputElement | null>;
 
@@ -76,6 +78,12 @@ export class SpatialUI {
           console.log('[DEBUG_SPATIAL_UI] Received sync:memories, count =', memories.length);
           this.memories = Array.isArray(memories) ? memories : [];
           this.renderMemories();
+      });
+      this.bus.on(APP_EVENTS.SYNC_PHOTOS, (photos: RoomPhoto[]) => {
+          console.log('[DEBUG_SPATIAL_UI] Received sync:photos, count =', photos.length);
+          this.photos = Array.isArray(photos) ? photos : [];
+          this.renderPhotos();
+          this.renderMemories(); // Refresh memories because photos are merged
       });
   }
 
@@ -141,6 +149,72 @@ export class SpatialUI {
             const presence = (window as any).presence;
             if (presence) {
                 presence.playNextInQueue();
+            }
+        });
+    }
+
+    // Photo Wall Listeners
+    const btnSelectPhoto = $('btn-select-photo');
+    const photoFileInput = $<HTMLInputElement>('photo-file-input');
+    const selectedPhotoName = $('selected-photo-name');
+    const btnUploadPhoto = $<HTMLButtonElement>('btn-upload-photo');
+    const photoCaptionInput = $<HTMLInputElement>('photo-caption-input');
+    const photoUploadError = $('photo-upload-error');
+
+    if (btnSelectPhoto && photoFileInput && selectedPhotoName) {
+        btnSelectPhoto.addEventListener('click', () => {
+            photoFileInput.click();
+        });
+        photoFileInput.addEventListener('change', (e: any) => {
+            const file = e.target.files?.[0];
+            if (file) {
+                selectedPhotoName.textContent = file.name;
+            } else {
+                selectedPhotoName.textContent = 'no file chosen';
+            }
+        });
+    }
+
+    if (btnUploadPhoto && photoFileInput && photoCaptionInput && photoUploadError && selectedPhotoName) {
+        btnUploadPhoto.addEventListener('click', async () => {
+            const file = photoFileInput.files?.[0];
+            if (!file) {
+                photoUploadError.textContent = 'please choose a photo first.';
+                photoUploadError.style.display = 'block';
+                return;
+            }
+            
+            const caption = photoCaptionInput.value.trim() || 'a memory';
+            photoUploadError.style.display = 'none';
+            btnUploadPhoto.disabled = true;
+            const originalBtnText = btnUploadPhoto.textContent;
+            btnUploadPhoto.textContent = 'pinning...';
+            this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'soft_click');
+
+            try {
+                const downloadUrl = await uploadPhoto(file);
+                const presence = (window as any).presence;
+                if (presence) {
+                    await presence.savePhoto(downloadUrl, caption);
+                }
+                
+                // Clear input fields
+                photoFileInput.value = '';
+                photoCaptionInput.value = '';
+                selectedPhotoName.textContent = 'no file chosen';
+                this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'paper_pin');
+            } catch (err: any) {
+                console.error('[PHOTO_UPLOAD_ERROR]', err);
+                const isStorageUnavailable = err.code === 'storage/unknown' || (err.message && err.message.includes('unknown error')) || err.status_ === 404;
+                if (isStorageUnavailable) {
+                    photoUploadError.textContent = 'Firebase Storage is not enabled in your Firebase console. Please follow the setup guide to enable it.';
+                } else {
+                    photoUploadError.textContent = err.message || 'failed to pin photo.';
+                }
+                photoUploadError.style.display = 'block';
+            } finally {
+                btnUploadPhoto.disabled = false;
+                btnUploadPhoto.textContent = originalBtnText;
             }
         });
     }
@@ -498,18 +572,36 @@ export class SpatialUI {
     const presence = (window as any).presence;
     if (!presence) return;
 
-    if (this.memories.length === 0) {
+    // Combine memories and photos as first-class room memories
+    const combined: any[] = [
+      ...this.memories.map(m => ({ ...m, isPhoto: false })),
+      ...this.photos.map(p => ({
+        id: p.id,
+        type: 'photo',
+        title: p.caption || 'photograph',
+        description: 'photograph',
+        createdAt: p.createdAt,
+        createdBy: p.uploadedBy,
+        creatorUid: p.creatorUid,
+        payload: { url: p.url, caption: p.caption },
+        isPhoto: true
+      }))
+    ];
+
+    combined.sort((a, b) => b.createdAt - a.createdAt);
+
+    if (combined.length === 0) {
         listEl.innerHTML = `
             <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; opacity: 0.4;">
                 <span style="font-size: 1.8rem; margin-bottom: 8px;">📌</span>
-                <span style="font-size: 0.8rem; font-style: italic; font-family: var(--font-ui);">This room's walls are bare. Pin a note, object, or tape to build its memory...</span>
+                <span style="font-size: 0.8rem; font-style: italic; font-family: var(--font-ui);">This room's walls are bare. Pin a note, object, tape, or photo to build its memory...</span>
             </div>
         `;
         return;
     }
 
     const frag = document.createDocumentFragment();
-    this.memories.forEach(item => {
+    combined.forEach(item => {
         const itemDiv = createSafeElement('div');
         itemDiv.style.display = 'flex';
         itemDiv.style.justifyContent = 'space-between';
@@ -535,6 +627,10 @@ export class SpatialUI {
             typeSymbol = '🧸';
             leftBorderColor = 'rgba(74, 222, 128, 0.6)'; // green
             rowBg = 'rgba(74, 222, 128, 0.02)';
+        } else if (item.type === 'photo') {
+            typeSymbol = '📸';
+            leftBorderColor = 'rgba(168, 85, 247, 0.6)'; // purple
+            rowBg = 'rgba(168, 85, 247, 0.02)';
         } else {
             typeSymbol = '⏳';
             leftBorderColor = 'rgba(96, 165, 250, 0.6)'; // blue
@@ -610,6 +706,9 @@ export class SpatialUI {
                     author: item.payload.author,
                     id: Date.now()
                 });
+            } else if (item.type === 'photo') {
+                // Photo memory restore: scroll to photo wall section
+                $('photo-wall-section')?.scrollIntoView({ behavior: 'smooth' });
             }
         });
         actionsDiv.appendChild(restoreBtn);
@@ -623,7 +722,11 @@ export class SpatialUI {
             deleteBtn.style.color = 'var(--accent)';
             deleteBtn.addEventListener('click', () => {
                 this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'soft_click');
-                presence.removeMemory(item.id);
+                if (item.isPhoto) {
+                    presence.deletePhoto(item.id);
+                } else {
+                    presence.removeMemory(item.id);
+                }
             });
             actionsDiv.appendChild(deleteBtn);
         }
@@ -632,5 +735,58 @@ export class SpatialUI {
         frag.appendChild(itemDiv);
     });
     listEl.appendChild(frag);
+  }
+
+  renderPhotos() {
+    const gridEl = $('photo-grid');
+    if (!gridEl) return;
+    gridEl.innerHTML = '';
+
+    const presence = (window as any).presence;
+    if (!presence) return;
+
+    if (this.photos.length === 0) {
+        gridEl.innerHTML = `
+            <div style="grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px; text-align: center; opacity: 0.4;">
+                <span style="font-size: 2rem; margin-bottom: 8px;">📷</span>
+                <span style="font-size: 0.8rem; font-style: italic; font-family: var(--font-ui);">No photographs pinned here yet...</span>
+            </div>
+        `;
+        return;
+    }
+
+    const frag = document.createDocumentFragment();
+    this.photos.forEach(photo => {
+        const card = createSafeElement('div', 'polaroid-card');
+        
+        const imgContainer = createSafeElement('div', 'polaroid-image-container');
+        const img = createSafeElement('img', 'polaroid-image') as HTMLImageElement;
+        img.src = photo.url;
+        img.alt = photo.caption || 'Polaroid Memory';
+        img.loading = 'lazy';
+        imgContainer.appendChild(img);
+        
+        const caption = createSafeElement('div', 'polaroid-caption', photo.caption || '');
+        
+        const meta = createSafeElement('div', 'polaroid-meta', `by ${photo.uploadedBy} · ${formatTimeAgo(photo.createdAt)}`);
+        
+        card.appendChild(imgContainer);
+        card.appendChild(caption);
+        card.appendChild(meta);
+
+        // Creator-only delete button
+        if (presence.userId && photo.creatorUid === presence.userId) {
+            const deleteBtn = createSafeElement('button', 'polaroid-delete-btn', '×');
+            deleteBtn.title = 'Delete photo';
+            deleteBtn.addEventListener('click', () => {
+                this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'soft_click');
+                presence.deletePhoto(photo.id);
+            });
+            card.appendChild(deleteBtn);
+        }
+
+        frag.appendChild(card);
+    });
+    gridEl.appendChild(frag);
   }
 }

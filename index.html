@@ -197,6 +197,26 @@
     </div>
   </section>
 
+  <section class="cinematic-space" id="photo-wall-section" aria-label="Photo Wall">
+    <h2 style="opacity: 0.7; font-size: 1.8rem; margin-bottom: 8px;">Old photographs left behind</h2>
+    <p class="subtitle" style="margin-bottom: 32px; opacity: 0.5; font-size: 0.95rem;">polaroids pinned to the corkboard</p>
+    
+    <!-- Upload Controller -->
+    <div style="margin-bottom: 36px; display: flex; flex-direction: column; gap: 12px; max-width: 420px; margin-left: auto; margin-right: auto; text-align: left; background: rgba(0,0,0,0.15); padding: 20px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.03);">
+      <div style="display: flex; gap: 12px; align-items: center; justify-content: space-between;">
+        <input type="file" id="photo-file-input" accept="image/*" style="display: none;" aria-label="Choose Polaroid Photo">
+        <button class="text-btn" id="btn-select-photo" style="margin: 0; padding: 8px 16px; border: 1px solid rgba(255,255,255,0.15); border-radius: 4px; background: rgba(255,255,255,0.02); font-weight: 500; font-size: 0.8rem; text-transform: lowercase;">choose photo</button>
+        <span id="selected-photo-name" style="font-size: 0.75rem; opacity: 0.5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; font-family: var(--font-ui);">no file chosen</span>
+      </div>
+      <input type="text" id="photo-caption-input" class="ethereal-input" placeholder="write a short caption..." maxlength="80" aria-label="Photo caption" style="padding: 10px; font-size: 0.85rem; border-radius: 4px; text-align: left; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08);">
+      <button class="text-btn" id="btn-upload-photo" style="margin: 0; width: 100%; padding: 10px; border: 1px solid var(--accent); border-radius: 4px; background: rgba(235,94,85,0.08); color: var(--accent); font-weight: 700; text-transform: lowercase; font-size: 0.85rem;">pin photo</button>
+      <div id="photo-upload-error" style="color: var(--accent); font-size: 0.75rem; display: none; margin-top: 4px; line-height: 1.4; font-family: var(--font-ui);"></div>
+    </div>
+
+    <!-- Photo Grid -->
+    <div id="photo-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 28px; justify-items: center; align-items: start; margin-top: 24px; aria-live: polite;"></div>
+  </section>
+
 </main>
 
 <!-- AMBIENT FEED -->

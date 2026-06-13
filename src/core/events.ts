@@ -22,6 +22,7 @@ export const APP_EVENTS = {
   SYNC_QUEUE: 'sync:queue',
   SYNC_HISTORY: 'sync:history',
   SYNC_MEMORIES: 'sync:memories',
+  SYNC_PHOTOS: 'sync:photos',
   AMBIENT_ACTION_RECEIVED: 'sync:action',
 
   // Feedback (Engines -> UI)

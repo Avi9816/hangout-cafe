@@ -3,7 +3,8 @@ import { APP_EVENTS } from '../core/events';
 import { LifecycleManager } from '../core/Lifecycle';
 import { db, initFirebase } from '../config/firebase';
 import { doc, setDoc, getDoc, onSnapshot, Unsubscribe, updateDoc, deleteField, collection, addDoc, query, orderBy, limit, getDocs, deleteDoc, runTransaction } from 'firebase/firestore';
-import { UserProfile, Note, MemoryObject, QueueItem, RoomHistoryEvent, RoomMemory } from '../types';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { UserProfile, Note, MemoryObject, QueueItem, RoomHistoryEvent, RoomMemory, RoomPhoto } from '../types';
 import { $ } from '../utils/dom'; 
 import { debounce as debounceUtil } from '../utils/timing';
 import { devLog } from '../utils/logger';
@@ -43,6 +44,8 @@ export class SharedPresence {
   unsubMemories: Unsubscribe | null = null;
   history: RoomHistoryEvent[] = [];
   memories: RoomMemory[] = [];
+  unsubPhotos: Unsubscribe | null = null;
+  photos: RoomPhoto[] = [];
   joinedAt = 0;
   
   pendingJoin: { room: string, theme: string | null } | null = null;
@@ -284,9 +287,11 @@ export class SharedPresence {
     if (this.unsubQueue) { this.unsubQueue(); this.unsubQueue = null; }
     if (this.unsubHistory) { this.unsubHistory(); this.unsubHistory = null; }
     if (this.unsubMemories) { this.unsubMemories(); this.unsubMemories = null; }
+    if (this.unsubPhotos) { this.unsubPhotos(); this.unsubPhotos = null; }
     this.queue = [];
     this.history = [];
     this.memories = [];
+    this.photos = [];
 
     const ref = doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode);
     updateDoc(ref, {
@@ -310,9 +315,11 @@ export class SharedPresence {
     if (this.unsubQueue) { this.unsubQueue(); this.unsubQueue = null; }
     if (this.unsubHistory) { this.unsubHistory(); this.unsubHistory = null; }
     if (this.unsubMemories) { this.unsubMemories(); this.unsubMemories = null; }
+    if (this.unsubPhotos) { this.unsubPhotos(); this.unsubPhotos = null; }
     this.queue = [];
     this.history = [];
     this.memories = [];
+    this.photos = [];
     this.joinedAt = Date.now();
 
     this.roomCode = roomKey; this.ghostUsers = {}; this.activeUsers = {}; this.lastActionTimestamp = 0;
@@ -372,6 +379,7 @@ export class SharedPresence {
     if(this.unsubNotes) { this.unsubNotes(); this.unsubNotes = null; }
     if(this.unsubObjects) { this.unsubObjects(); this.unsubObjects = null; }
     if(this.unsubPresence) { this.unsubPresence(); this.unsubPresence = null; }
+    if(this.unsubPhotos) { this.unsubPhotos(); this.unsubPhotos = null; }
     this.useSubcollectionNotes = false;
     this.useSubcollectionObjects = false;
     this.useSubcollectionPresence = false;
@@ -624,6 +632,26 @@ export class SharedPresence {
     }, (err) => {
       console.error('[DEBUG_LISTEN_ROOM] Memories snapshot error:', err);
     });
+
+    const photosCol = collection(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'photos');
+    const photosQuery = query(photosCol, orderBy('createdAt', 'desc'), limit(100));
+    this.unsubPhotos = onSnapshot(photosQuery, (snap) => {
+      this.photos = snap.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          url: data.url || '',
+          caption: data.caption || '',
+          uploadedBy: data.uploadedBy || 'wanderer',
+          creatorUid: data.creatorUid || '',
+          createdAt: data.createdAt || 0
+        } as RoomPhoto;
+      });
+      devLog('[PHOTOS_SYNC] Realtime photos update received. Count:', this.photos.length);
+      this.bus.emit(APP_EVENTS.SYNC_PHOTOS, this.photos);
+    }, (err) => {
+      console.error('[DEBUG_LISTEN_ROOM] Photos snapshot error:', err);
+    });
   }
 
   renderPresenceUI() {
@@ -828,7 +856,7 @@ export class SharedPresence {
       }
   }
 
-  async addHistoryEvent(type: 'tape_played' | 'note_pinned' | 'object_placed' | 'host_changed' | 'room_created', text: string) {
+  async addHistoryEvent(type: 'tape_played' | 'note_pinned' | 'object_placed' | 'host_changed' | 'room_created' | 'photo_added', text: string) {
       if (!this.userId || !db || !this.roomCode) return;
       devLog('[ROOM_HISTORY] Writing history event:', type, text);
       const historyCol = collection(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'history');
@@ -885,5 +913,59 @@ export class SharedPresence {
           } as RoomMemory;
       });
   }
+
+  async savePhoto(url: string, caption: string) {
+      if (!this.userId || !db || !this.roomCode) return;
+      devLog('[ROOM_PHOTOS] Saving photo:', url, caption);
+      const photosCol = collection(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'photos');
+      const alias = this.profile?.alias || 'wanderer';
+      
+      await addDoc(photosCol, {
+          url,
+          caption,
+          uploadedBy: alias,
+          creatorUid: this.userId,
+          createdAt: Date.now()
+      }).then(() => {
+          this.addHistoryEvent('photo_added', `${alias} pinned a photograph`);
+      }).catch(err => console.error('[ROOM_PHOTOS] Error saving photo:', err));
+  }
+
+  async deletePhoto(photoId: string) {
+      if (!this.userId || !db || !this.roomCode) return;
+      devLog('[ROOM_PHOTOS] Deleting photo:', photoId);
+      const photoRef = doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'photos', photoId);
+      await deleteDoc(photoRef).catch(err => console.error('[ROOM_PHOTOS] Error deleting photo:', err));
+  }
+
+  async loadPhotos(): Promise<RoomPhoto[]> {
+      if (!this.userId || !db || !this.roomCode) return [];
+      if (this.photos && this.photos.length > 0) return this.photos;
+      const photosCol = collection(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'photos');
+      const q = query(photosCol, orderBy('createdAt', 'desc'));
+      const snap = await getDocs(q).catch(() => null);
+      if (!snap) return [];
+      return snap.docs.map(doc => {
+          const data = doc.data();
+          return {
+              id: doc.id,
+              url: data.url || '',
+              caption: data.caption || '',
+              uploadedBy: data.uploadedBy || 'wanderer',
+              creatorUid: data.creatorUid || '',
+              createdAt: data.createdAt || 0
+          } as RoomPhoto;
+      });
+  }
+}
+
+export async function uploadPhoto(file: File): Promise<string> {
+  if (typeof window !== 'undefined' && (window as any).mockUploadPhoto) {
+    return (window as any).mockUploadPhoto(file);
+  }
+  const storage = getStorage();
+  const storageRef = ref(storage, `photos/${Date.now()}_${file.name}`);
+  const snapshot = await uploadBytes(storageRef, file);
+  return await getDownloadURL(snapshot.ref);
 }
 

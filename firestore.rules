@@ -92,5 +92,13 @@ service cloud.firestore {
         && request.resource.data.payload == resource.data.payload;
       allow delete: if isAuthenticated() && resource.data.creatorUid == request.auth.uid;
     }
+
+    // 9. Room Photos Subcollection
+    match /artifacts/{appId}/public/data/rooms/{roomCode}/photos/{photoId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update: if false;
+      allow delete: if isAuthenticated() && resource.data.creatorUid == request.auth.uid;
+    }
   }
 }
