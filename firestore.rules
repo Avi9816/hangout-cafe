@@ -14,8 +14,33 @@ service cloud.firestore {
 
     // 1. User Profiles
     match /artifacts/{appId}/users/{userId}/userData/profile {
-      allow read: if true; // Publicly readable so peers can display aliases
-      allow write: if isOwner(userId); // Only the authenticated owner can write
+      allow read: if true;
+      allow write: if isOwner(userId)
+        && request.resource.data.keys().hasOnly([
+             'alias', 'bio', 'joinedAt', 'favoriteTheme', 'avatarUrl',
+             'roomsVisited', 'roomsFavorited', 'memoriesCreated', 'photosUploaded', 'updatedAt'
+           ])
+        && request.resource.data.alias is string && request.resource.data.alias.size() <= 32
+        && request.resource.data.bio is string && request.resource.data.bio.size() <= 160
+        && request.resource.data.favoriteTheme in ['window-seat', 'last-train', 'between-pages', 'northern-lights']
+        && request.resource.data.joinedAt is int
+        && request.resource.data.updatedAt is int
+        && request.resource.data.roomsVisited is int && request.resource.data.roomsVisited >= 0
+        && request.resource.data.roomsFavorited is int && request.resource.data.roomsFavorited >= 0
+        && request.resource.data.memoriesCreated is int && request.resource.data.memoriesCreated >= 0
+        && request.resource.data.photosUploaded is int && request.resource.data.photosUploaded >= 0
+        && (!('avatarUrl' in request.resource.data) || request.resource.data.avatarUrl is string)
+        && (resource == null ?
+             (request.resource.data.roomsVisited <= 1
+              && request.resource.data.roomsFavorited == 0
+              && request.resource.data.memoriesCreated == 0
+              && request.resource.data.photosUploaded == 0)
+             :
+             (request.resource.data.roomsVisited >= resource.data.roomsVisited && request.resource.data.roomsVisited <= resource.data.roomsVisited + 1
+              && request.resource.data.roomsFavorited >= resource.data.roomsFavorited - 1 && request.resource.data.roomsFavorited <= resource.data.roomsFavorited + 1
+              && request.resource.data.memoriesCreated >= resource.data.memoriesCreated && request.resource.data.memoriesCreated <= resource.data.memoriesCreated + 1
+              && request.resource.data.photosUploaded >= resource.data.photosUploaded && request.resource.data.photosUploaded <= resource.data.photosUploaded + 1)
+           );
     }
 
     // 1b. User Favorites Subcollection

@@ -1,11 +1,22 @@
 export interface UserProfile {
   alias: string;
-  mood: string;
+  bio: string;
+  joinedAt: number;
+  favoriteTheme: string;
+  avatarUrl?: string;
+  roomsVisited: number;
+  roomsFavorited: number;
+  memoriesCreated: number;
+  photosUploaded: number;
+  updatedAt: number;
+
+  // Local/presence only legacy fields
+  mood?: string;
   awakeReason?: string;
-  joined: number;
+  joined?: number;
   lastRoom?: string | null;
-  visits: number;
-  firstVisit: number;
+  visits?: number;
+  firstVisit?: number;
 }
 
 export interface Note {

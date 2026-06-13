@@ -534,4 +534,26 @@ h2 { font-family: var(--font-script); font-size: clamp(2rem, 8vw, 2.5rem); font-
   font-size: 0.75rem;
 }
 
+.profile-avatar-container {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
+}
+
+.presence-user-pill {
+  transition: background-color 0.2s;
+}
+
+.presence-user-pill:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
 

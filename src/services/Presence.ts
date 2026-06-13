@@ -84,6 +84,9 @@ export class SharedPresence {
         window.addEventListener('pagehide', () => this.leaveRoom());
         (window as any).presence = this;
         (window as any)._firestore = { doc, getDoc, setDoc, collection, getDocs, deleteDoc, updateDoc };
+        if (import.meta.env.DEV) {
+            (window as any)._storage = { getStorage, ref, uploadBytes, getDownloadURL };
+        }
     }
   }
 
@@ -241,7 +244,37 @@ export class SharedPresence {
        const overlay = $('identity-overlay');
 
        if(snap && snap.exists()) {
-          this.profile = snap.data() as UserProfile;
+          const data = snap.data();
+          
+          // Check for legacy fields or missing fields to trigger clean migration
+          const hasLegacyFields = data.mood !== undefined || data.visits !== undefined || data.joined !== undefined;
+          const missingFields = data.alias === undefined || data.bio === undefined || data.joinedAt === undefined ||
+                                data.favoriteTheme === undefined || data.roomsVisited === undefined ||
+                                data.roomsFavorited === undefined || data.memoriesCreated === undefined ||
+                                data.photosUploaded === undefined || data.updatedAt === undefined;
+
+          if (hasLegacyFields || missingFields) {
+              const normalizedProfile = {
+                  alias: data.alias || 'wanderer',
+                  bio: data.bio || '',
+                  joinedAt: data.joinedAt || data.joined || Date.now(),
+                  favoriteTheme: data.favoriteTheme || 'window-seat',
+                  avatarUrl: data.avatarUrl || '',
+                  roomsVisited: data.roomsVisited !== undefined ? data.roomsVisited : 0,
+                  roomsFavorited: data.roomsFavorited !== undefined ? data.roomsFavorited : 0,
+                  memoriesCreated: data.memoriesCreated !== undefined ? data.memoriesCreated : 0,
+                  photosUploaded: data.photosUploaded !== undefined ? data.photosUploaded : 0,
+                  updatedAt: Date.now()
+              };
+              await setDoc(ref, normalizedProfile); // Overwrite to delete legacy fields
+              this.profile = normalizedProfile;
+          } else {
+              this.profile = data as UserProfile;
+          }
+          
+          // Keep legacy mood in-memory for presence list rendering
+          if (data.mood) this.profile.mood = data.mood;
+
           if (overlay) overlay.classList.add('hidden');
           this.applyIdentity();
           this.listenToFavorites();
@@ -259,15 +292,49 @@ export class SharedPresence {
         this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'wood_creak');
         const alias = ($('id-alias') as HTMLInputElement)?.value.trim() || 'wanderer';
         const mood = ($('id-mood') as HTMLInputElement)?.value.trim() || 'resting quietly';
-        this.profile = { alias, mood, joined: Date.now(), lastRoom: null, visits: 1, firstVisit: Date.now() };
+        
+        // Client side validation
+        if (alias.length > 32) {
+            alert('Alias cannot exceed 32 characters');
+            return;
+        }
+        if (/<[^>]*>|javascript:/i.test(alias) || /<[^>]*>|javascript:/i.test(mood)) {
+            alert('HTML or script tags are not allowed');
+            return;
+        }
+
+        const cleanProfile = {
+            alias: alias,
+            bio: '',
+            joinedAt: Date.now(),
+            favoriteTheme: 'window-seat',
+            avatarUrl: '',
+            roomsVisited: 1, // first room visit starting now
+            roomsFavorited: 0,
+            memoriesCreated: 0,
+            photosUploaded: 0,
+            updatedAt: Date.now()
+        };
+
+        this.profile = { ...cleanProfile, mood }; // Keep mood locally in memory
         
         if(db && this.userId) {
-           setDoc(doc(db, 'artifacts', this.appId, 'users', this.userId, 'userData', 'profile'), this.profile, {merge: true});
+           const ref = doc(db, 'artifacts', this.appId, 'users', this.userId, 'userData', 'profile');
+           setDoc(ref, cleanProfile).then(() => {
+               $('identity-overlay')?.classList.add('hidden');
+               this.applyIdentity();
+               this.listenToFavorites();
+               if(this.pendingJoin) { this.joinRoom(this.pendingJoin.room, this.pendingJoin.theme); this.pendingJoin = null; }
+           }).catch(err => {
+               console.error('[IDENTITY] Error creating profile:', err);
+               alert('Failed to enter the café. Please try again.');
+           });
+        } else {
+           $('identity-overlay')?.classList.add('hidden');
+           this.applyIdentity();
+           this.listenToFavorites();
+           if(this.pendingJoin) { this.joinRoom(this.pendingJoin.room, this.pendingJoin.theme); this.pendingJoin = null; }
         }
-        $('identity-overlay')?.classList.add('hidden');
-        this.applyIdentity();
-        this.listenToFavorites();
-        if(this.pendingJoin) { this.joinRoom(this.pendingJoin.room, this.pendingJoin.theme); this.pendingJoin = null; }
      });
   }
 
@@ -407,10 +474,20 @@ export class SharedPresence {
             transaction.update(roomRef, updates);
         }
 
-        return { isNewRoom: !roomSnap.exists(), initialTheme };
-    }).then(({ isNewRoom, initialTheme }) => {
+        return { isNewRoom: !roomSnap.exists(), initialTheme, isNewVisitor };
+    }).then(({ isNewRoom, initialTheme, isNewVisitor }) => {
         if (isNewRoom) {
             this.addHistoryEvent('room_created', `Room created with theme "${initialTheme}"`);
+        }
+        if (isNewVisitor && this.profile) {
+            const profileRef = doc(db!, 'artifacts', this.appId, 'users', this.userId!, 'userData', 'profile');
+            updateDoc(profileRef, {
+                roomsVisited: increment(1),
+                updatedAt: Date.now()
+            }).then(() => {
+                if (this.profile) this.profile.roomsVisited = (this.profile.roomsVisited || 0) + 1;
+                this.applyIdentity();
+            }).catch(err => console.error('[ROOM_VISITED_SYNC] Error incrementing roomsVisited:', err));
         }
         this.updatePresence(); 
         this.listenToRoom();
@@ -781,6 +858,14 @@ export class SharedPresence {
             nameSpan.style.fontWeight = '500';
             userPill.appendChild(nameSpan);
 
+            userPill.style.cursor = 'pointer';
+            userPill.addEventListener('click', () => {
+                this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'soft_click');
+                if ((window as any).spatialUI) {
+                    (window as any).spatialUI.openPublicProfile(uid);
+                }
+            });
+
             if (isHost) {
                 const badge = document.createElement('span');
                 badge.className = 'badge-host';
@@ -1008,6 +1093,16 @@ export class SharedPresence {
               memoryCount: increment(1),
               updatedAt: Date.now()
           }).catch(err => console.error('Error updating memoryCount:', err));
+
+          if (this.profile) {
+              const profileRef = doc(db!, 'artifacts', this.appId, 'users', this.userId!, 'userData', 'profile');
+              updateDoc(profileRef, {
+                  memoriesCreated: increment(1),
+                  updatedAt: Date.now()
+              }).then(() => {
+                  if (this.profile) this.profile.memoriesCreated = (this.profile.memoriesCreated || 0) + 1;
+              }).catch(err => console.error('[MEMORIES_COUNT_SYNC] Error incrementing memoriesCreated:', err));
+          }
       }).catch(err => console.error('[ROOM_MEMORIES] Error saving memory:', err));
   }
 
@@ -1066,6 +1161,16 @@ export class SharedPresence {
               photoCount: increment(1),
               updatedAt: Date.now()
           }).catch(err => console.error('Error updating photoCount:', err));
+
+          if (this.profile) {
+              const profileRef = doc(db!, 'artifacts', this.appId, 'users', this.userId!, 'userData', 'profile');
+              await updateDoc(profileRef, {
+                  photosUploaded: increment(1),
+                  updatedAt: Date.now()
+              }).then(() => {
+                  if (this.profile) this.profile.photosUploaded = (this.profile.photosUploaded || 0) + 1;
+              }).catch(err => console.error('[PHOTOS_COUNT_SYNC] Error incrementing photosUploaded:', err));
+          }
       }).catch(err => console.error('[ROOM_PHOTOS] Error saving photo:', err));
   }
 
@@ -1227,6 +1332,16 @@ export class SharedPresence {
         };
       });
 
+      // Self-healing stats synchronization for roomsFavorited
+      if (this.profile && this.profile.roomsFavorited !== this.favorites.length) {
+        this.profile.roomsFavorited = this.favorites.length;
+        const profileRef = doc(db!, 'artifacts', this.appId, 'users', this.userId!, 'userData', 'profile');
+        updateDoc(profileRef, {
+          roomsFavorited: this.favorites.length,
+          updatedAt: Date.now()
+        }).catch(err => console.error('[FAVORITES_COUNT_SYNC] Error updating user profile favorited stats:', err));
+      }
+
       this.bus.emit(APP_EVENTS.FAVORITES_UPDATED, this.favorites);
     }, (err) => {
       console.error('Error listening to user favorites:', err);
@@ -1241,6 +1356,71 @@ export class SharedPresence {
     Object.values(this.favoritesUnsubs).forEach(unsub => unsub());
     this.favoritesUnsubs = {};
     this.favorites = [];
+  }
+
+  async saveProfile(updated: { alias: string, bio: string, favoriteTheme: string, avatarUrl?: string }) {
+    if (!this.userId || !db || !this.profile) return;
+    
+    if (updated.alias.length > 32) throw new Error('Alias too long');
+    if (updated.bio.length > 160) throw new Error('Bio too long');
+    if (!['window-seat', 'last-train', 'between-pages', 'northern-lights'].includes(updated.favoriteTheme)) {
+        throw new Error('Invalid theme');
+    }
+    
+    if (/<[^>]*>|javascript:/i.test(updated.alias) || /<[^>]*>|javascript:/i.test(updated.bio)) {
+        throw new Error('HTML/Script tags are not allowed');
+    }
+
+    if (updated.avatarUrl) {
+      const decodedUrl = decodeURIComponent(updated.avatarUrl);
+      const isExpectedPath = (updated.avatarUrl.startsWith('https://firebasestorage.googleapis.com/') || updated.avatarUrl.includes('.firebasestorage.app'))
+        && decodedUrl.includes(`avatars/${this.userId}/`);
+      if (!isExpectedPath) {
+        throw new Error('Invalid avatar image source path');
+      }
+    }
+    
+    const cleanProfile = {
+      alias: updated.alias,
+      bio: updated.bio,
+      joinedAt: this.profile.joinedAt || Date.now(),
+      favoriteTheme: updated.favoriteTheme,
+      avatarUrl: updated.avatarUrl || '',
+      roomsVisited: this.profile.roomsVisited || 0,
+      roomsFavorited: this.profile.roomsFavorited || 0,
+      memoriesCreated: this.profile.memoriesCreated || 0,
+      photosUploaded: this.profile.photosUploaded || 0,
+      updatedAt: Date.now()
+    };
+    
+    const ref = doc(db, 'artifacts', this.appId, 'users', this.userId, 'userData', 'profile');
+    await setDoc(ref, cleanProfile);
+    
+    const mood = this.profile.mood;
+    this.profile = { ...cleanProfile, mood };
+    this.applyIdentity();
+  }
+
+  async uploadAvatar(file: File): Promise<string> {
+    if (!this.userId || !db) throw new Error('Not authenticated');
+    
+    if (!file.type.startsWith('image/')) {
+        throw new Error('File must be an image');
+    }
+    if (file.size > 2 * 1024 * 1024) {
+        throw new Error('File size must be less than 2MB');
+    }
+    
+    if (typeof window !== 'undefined' && (window as any).mockUploadAvatar) {
+        return await (window as any).mockUploadAvatar(file);
+    }
+    
+    const storage = getStorage();
+    const fileName = `${Date.now()}_${file.name}`;
+    const avatarRef = ref(storage, `avatars/${this.userId}/${fileName}`);
+    
+    await uploadBytes(avatarRef, file);
+    return await getDownloadURL(avatarRef);
   }
 }
 

@@ -246,6 +246,43 @@ export class SpatialUI {
         const modal = $('room-profile-modal');
         if (modal) modal.style.display = 'none';
     });
+
+    $('identity-status')?.addEventListener('click', () => {
+        this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'soft_click');
+        this.openMyProfile();
+    });
+
+    // Close My Profile Modal
+    $('my-profile-modal-close')?.addEventListener('click', () => {
+        this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'soft_click');
+        const modal = $('my-profile-modal');
+        if (modal) modal.style.display = 'none';
+    });
+    $('my-profile-modal-overlay')?.addEventListener('click', () => {
+        const modal = $('my-profile-modal');
+        if (modal) modal.style.display = 'none';
+    });
+    $('btn-close-my-profile')?.addEventListener('click', () => {
+        this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'soft_click');
+        const modal = $('my-profile-modal');
+        if (modal) modal.style.display = 'none';
+    });
+
+    // Close Public Profile Modal
+    $('public-profile-modal-close')?.addEventListener('click', () => {
+        this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'soft_click');
+        const modal = $('public-profile-modal');
+        if (modal) modal.style.display = 'none';
+    });
+    $('public-profile-modal-overlay')?.addEventListener('click', () => {
+        const modal = $('public-profile-modal');
+        if (modal) modal.style.display = 'none';
+    });
+    $('btn-close-public-profile')?.addEventListener('click', () => {
+        this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'soft_click');
+        const modal = $('public-profile-modal');
+        if (modal) modal.style.display = 'none';
+    });
   }
 
   setupTabListeners() {
@@ -1206,5 +1243,182 @@ export class SpatialUI {
     });
 
     gridEl.appendChild(frag);
+  }
+
+  openMyProfile() {
+    const presence = (window as any).presence;
+    if (!presence || !presence.profile) return;
+    
+    const modal = $('my-profile-modal');
+    if (!modal) return;
+    
+    modal.style.display = 'flex';
+    
+    const aliasInput = $('edit-profile-alias') as HTMLInputElement;
+    const bioInput = $('edit-profile-bio') as HTMLTextAreaElement;
+    const themeSelect = $('select-favorite-theme') as HTMLSelectElement;
+    const avatarEl = $('my-profile-avatar') as HTMLImageElement;
+    const avatarPlaceholderEl = $('my-profile-avatar-placeholder');
+    
+    if (aliasInput) aliasInput.value = presence.profile.alias || '';
+    if (bioInput) bioInput.value = presence.profile.bio || '';
+    if (themeSelect) themeSelect.value = presence.profile.favoriteTheme || 'window-seat';
+    
+    if (presence.profile.avatarUrl) {
+      if (avatarEl) {
+        avatarEl.src = presence.profile.avatarUrl;
+        avatarEl.style.display = 'block';
+      }
+      if (avatarPlaceholderEl) avatarPlaceholderEl.style.display = 'none';
+    } else {
+      if (avatarEl) avatarEl.style.display = 'none';
+      if (avatarPlaceholderEl) avatarPlaceholderEl.style.display = 'flex';
+    }
+    
+    const uploadBtn = $('btn-upload-avatar') as HTMLButtonElement;
+    const fileInput = $('input-avatar-upload') as HTMLInputElement;
+    if (uploadBtn && fileInput) {
+      uploadBtn.onclick = () => fileInput.click();
+      fileInput.onchange = async () => {
+        const file = fileInput.files?.[0];
+        if (!file) return;
+        
+        try {
+          uploadBtn.textContent = 'Uploading...';
+          uploadBtn.disabled = true;
+          
+          const downloadUrl = await presence.uploadAvatar(file);
+          
+          presence.profile.avatarUrl = downloadUrl;
+          if (avatarEl) {
+            avatarEl.src = downloadUrl;
+            avatarEl.style.display = 'block';
+          }
+          if (avatarPlaceholderEl) avatarPlaceholderEl.style.display = 'none';
+          
+          uploadBtn.textContent = 'Upload Photo';
+          uploadBtn.disabled = false;
+        } catch (err: any) {
+          console.error('[MY_PROFILE] Avatar upload failed:', err);
+          alert(err.message || 'Avatar upload failed.');
+          uploadBtn.textContent = 'Upload Photo';
+          uploadBtn.disabled = false;
+        }
+      };
+    }
+    
+    const saveBtn = $('btn-save-my-profile') as HTMLButtonElement;
+    if (saveBtn) {
+      saveBtn.onclick = async () => {
+        try {
+          saveBtn.textContent = 'Saving...';
+          saveBtn.disabled = true;
+          
+          const alias = aliasInput.value.trim();
+          const bio = bioInput.value.trim();
+          const favoriteTheme = themeSelect.value;
+          const avatarUrl = presence.profile.avatarUrl;
+          
+          if (!alias) throw new Error('Alias cannot be empty');
+          
+          await presence.saveProfile({
+            alias,
+            bio,
+            favoriteTheme,
+            avatarUrl
+          });
+          
+          modal.style.display = 'none';
+          saveBtn.textContent = 'Save Changes';
+          saveBtn.disabled = false;
+        } catch (err: any) {
+          console.error('[MY_PROFILE] Save profile failed:', err);
+          alert(err.message || 'Save profile failed.');
+          saveBtn.textContent = 'Save Changes';
+          saveBtn.disabled = false;
+        }
+      };
+    }
+  }
+
+  async openPublicProfile(uid: string) {
+    if (!db) return;
+    devLog('[PUBLIC_PROFILE] Opening public profile for:', uid);
+    
+    const modal = $('public-profile-modal');
+    if (!modal) return;
+    
+    modal.style.display = 'flex';
+    
+    const avatarEl = $('public-profile-avatar') as HTMLImageElement;
+    const avatarPlaceholderEl = $('public-profile-avatar-placeholder');
+    const titleEl = $('public-profile-title');
+    const themeEl = $('public-profile-theme');
+    const bioEl = $('public-profile-bio');
+    
+    const statJoined = $('public-profile-stat-joined');
+    const statVisited = $('public-profile-stat-visited');
+    const statFavorited = $('public-profile-stat-favorited');
+    const statMemories = $('public-profile-stat-memories');
+    const statPhotos = $('public-profile-stat-photos');
+    
+    if (avatarEl) avatarEl.style.display = 'none';
+    if (avatarPlaceholderEl) avatarPlaceholderEl.style.display = 'flex';
+    if (titleEl) titleEl.textContent = 'Loading...';
+    if (themeEl) {
+      themeEl.textContent = 'loading...';
+      themeEl.className = 'badge-theme';
+    }
+    if (bioEl) bioEl.textContent = 'Looking for records of this wanderer...';
+    if (statJoined) statJoined.textContent = '-';
+    if (statVisited) statVisited.textContent = '-';
+    if (statFavorited) statFavorited.textContent = '-';
+    if (statMemories) statMemories.textContent = '-';
+    if (statPhotos) statPhotos.textContent = '-';
+    
+    try {
+      const presence = (window as any).presence;
+      const appId = presence ? presence.appId : 'default-app-id';
+      const ref = doc(db, 'artifacts', appId, 'users', uid, 'userData', 'profile');
+      const snap = await getDoc(ref);
+      
+      if (snap && snap.exists()) {
+        const data = snap.data();
+        
+        if (titleEl) titleEl.textContent = data.alias || 'wanderer';
+        if (themeEl) {
+          themeEl.textContent = data.favoriteTheme || 'window-seat';
+        }
+        if (bioEl) {
+          bioEl.textContent = data.bio || 'A quiet soul with no bio.';
+        }
+        
+        if (data.avatarUrl) {
+          if (avatarEl) {
+            avatarEl.src = data.avatarUrl;
+            avatarEl.style.display = 'block';
+          }
+          if (avatarPlaceholderEl) avatarPlaceholderEl.style.display = 'none';
+        } else {
+          if (avatarEl) avatarEl.style.display = 'none';
+          if (avatarPlaceholderEl) avatarPlaceholderEl.style.display = 'flex';
+        }
+        
+        if (statJoined) {
+          statJoined.textContent = new Date(data.joinedAt || Date.now()).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' });
+        }
+        if (statVisited) statVisited.textContent = String(data.roomsVisited || 0);
+        if (statFavorited) statFavorited.textContent = String(data.roomsFavorited || 0);
+        if (statMemories) statMemories.textContent = String(data.memoriesCreated || 0);
+        if (statPhotos) statPhotos.textContent = String(data.photosUploaded || 0);
+      } else {
+        if (titleEl) titleEl.textContent = 'Wanderer';
+        if (bioEl) bioEl.textContent = 'No profile records found for this wanderer.';
+      }
+    } catch (err) {
+      console.error('[PUBLIC_PROFILE] Error loading public profile data:', err);
+      if (titleEl) titleEl.textContent = 'Error';
+      if (bioEl) bioEl.textContent = 'Could not retrieve profile record.';
+    }
   }
 }
