@@ -189,20 +189,38 @@ export class Environment {
     if (container) {
         container.innerHTML = '';
         Object.entries(this.themes).forEach(([key, theme]) => {
-            const btn = createSafeElement('button', 'dest-btn');
-            btn.dataset.room = key;
+            const card = createSafeElement('div', 'dest-btn');
+            card.dataset.room = key;
             const name = createSafeElement('span', 'room-card-name', theme.name);
             const desc = createSafeElement('span', 'room-card-desc', theme.desc);
             const meta = createSafeElement('span', 'room-card-meta', '0 souls resting');
             meta.id = `meta-${key}`;
-            btn.appendChild(name); btn.appendChild(desc); btn.appendChild(meta);
-            btn.addEventListener('mouseenter', () => this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'soft_click'));
-            btn.addEventListener('click', () => {
+            
+            const enterBtn = createSafeElement('button', 'text-btn dest-card-join', 'Enter room');
+            enterBtn.style.marginTop = '8px';
+            enterBtn.style.alignSelf = 'flex-start';
+            enterBtn.style.zIndex = '5';
+
+            card.appendChild(name); 
+            card.appendChild(desc); 
+            card.appendChild(meta);
+            card.appendChild(enterBtn);
+
+            card.addEventListener('mouseenter', () => this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'soft_click'));
+            card.addEventListener('click', () => {
+                this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'soft_click');
+                devLog('[ROOM_PROFILE_REQUEST_EMIT] public:', key);
+                this.bus.emit(APP_EVENTS.ROOM_PROFILE_REQUEST, key);
+            });
+
+            enterBtn.addEventListener('click', (e) => {
+                e.stopPropagation(); // Stop click from opening profile modal
                 this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'wood_creak');
                 devLog('[ROOM_JOIN_REQUEST_EMIT] public:', key);
                 this.bus.emit(APP_EVENTS.ROOM_JOIN_REQUEST, key);
             });
-            container.appendChild(btn);
+
+            container.appendChild(card);
         });
     }
     

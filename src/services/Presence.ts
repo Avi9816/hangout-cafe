@@ -28,6 +28,10 @@ export class SharedPresence {
   activeUsers: Record<string, any> = {};
   ghostUsers: Record<string, any> = {};
   
+  favorites: any[] = [];
+  private favoritesUnsubs: Record<string, Unsubscribe> = {};
+  private unsubFavoritesList: Unsubscribe | null = null;
+  
   notes: Note[] = [];
   objects: MemoryObject[] = [];
   currentVideoState: any = null;
@@ -79,7 +83,7 @@ export class SharedPresence {
         window.addEventListener('beforeunload', () => this.leaveRoom());
         window.addEventListener('pagehide', () => this.leaveRoom());
         (window as any).presence = this;
-        (window as any)._firestore = { doc, getDoc, collection, getDocs, deleteDoc, updateDoc };
+        (window as any)._firestore = { doc, getDoc, setDoc, collection, getDocs, deleteDoc, updateDoc };
     }
   }
 
@@ -199,6 +203,7 @@ export class SharedPresence {
   }
 
   useFallbackUserId() {
+    this.cleanupFavorites();
     let storedId = localStorage.getItem('hangout_cafe_anon_uid');
     if (!storedId) {
         storedId = 'anon-' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -214,6 +219,7 @@ export class SharedPresence {
     if (authInstance) {
         import('firebase/auth').then(({ onAuthStateChanged }) => {
             onAuthStateChanged(authInstance, async (u) => {
+                this.cleanupFavorites();
                 if (u) {
                     this.userId = u.uid;
                     await this.loadIdentity();
@@ -238,6 +244,7 @@ export class SharedPresence {
           this.profile = snap.data() as UserProfile;
           if (overlay) overlay.classList.add('hidden');
           this.applyIdentity();
+          this.listenToFavorites();
           
           if(this.pendingJoin) {
               this.joinRoom(this.pendingJoin.room, this.pendingJoin.theme);
@@ -259,6 +266,7 @@ export class SharedPresence {
         }
         $('identity-overlay')?.classList.add('hidden');
         this.applyIdentity();
+        this.listenToFavorites();
         if(this.pendingJoin) { this.joinRoom(this.pendingJoin.room, this.pendingJoin.theme); this.pendingJoin = null; }
      });
   }
@@ -336,13 +344,20 @@ export class SharedPresence {
     if(!this.userId || !db) return;
     
     const roomRef = doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', roomKey);
-    getDoc(roomRef).then(async (snap) => {
-        if (!snap.exists()) {
-            const initialTheme = theme || (isPublic ? roomKey : 'window-seat');
-            const displayName = isPublic ? 
-                (roomKey.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')) : 
-                `corner: ${roomKey}`;
-            await setDoc(roomRef, {
+    const visitorRef = doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', roomKey, 'visitors', this.userId);
+
+    runTransaction(db, async (transaction) => {
+        const roomSnap = await transaction.get(roomRef);
+        const visitorSnap = await transaction.get(visitorRef);
+        
+        const initialTheme = theme || (isPublic ? roomKey : 'window-seat');
+        const displayName = isPublic ? 
+            (roomKey.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')) : 
+            `corner: ${roomKey}`;
+        
+        const isNewVisitor = !visitorSnap.exists();
+        if (!roomSnap.exists()) {
+            transaction.set(roomRef, {
                 roomCode: roomKey,
                 displayName: displayName,
                 theme: initialTheme,
@@ -353,15 +368,31 @@ export class SharedPresence {
                 memoryCount: 0,
                 photoCount: 0,
                 queueCount: 0,
-                isPrivate: !isPublic
+                isPrivate: !isPublic,
+                visitorCount: 1,
+                visitCount: 1
             }, { merge: true });
-            this.addHistoryEvent('room_created', `Room created with theme "${initialTheme}"`);
+
+            transaction.set(visitorRef, {
+                uid: this.userId,
+                visitedAt: Date.now()
+            }, { merge: true });
         } else {
-            const data = snap.data();
+            const data = roomSnap.data();
             const updates: any = {
                 lastActiveAt: Date.now(),
-                updatedAt: Date.now()
+                updatedAt: Date.now(),
+                visitCount: (data.visitCount || 0) + 1
             };
+            if (isNewVisitor) {
+                updates.visitorCount = (data.visitorCount || 0) + 1;
+                transaction.set(visitorRef, {
+                    uid: this.userId,
+                    visitedAt: Date.now()
+                }, { merge: true });
+            } else {
+                updates.visitorCount = data.visitorCount || 1;
+            }
             if (!data.roomCode) updates.roomCode = roomKey;
             if (!data.displayName) {
                 updates.displayName = isPublic ? 
@@ -373,13 +404,19 @@ export class SharedPresence {
                 devLog('[THEME_SAVED]', theme);
                 updates.theme = theme;
             }
-            await updateDoc(roomRef, updates).catch(err => console.error('[FIRESTORE_ROOM_WRITE] private room metadata write ERROR:', err));
+            transaction.update(roomRef, updates);
+        }
+
+        return { isNewRoom: !roomSnap.exists(), initialTheme };
+    }).then(({ isNewRoom, initialTheme }) => {
+        if (isNewRoom) {
+            this.addHistoryEvent('room_created', `Room created with theme "${initialTheme}"`);
         }
         this.updatePresence(); 
         this.listenToRoom();
         this.broadcastActivity(`${this.profile?.alias || 'wanderer'} entered the corner`, '🚪');
     }).catch(err => {
-        console.error('[ROOM_HISTORY] Error checking room creation:', err);
+        console.error('[ROOM_HISTORY] Error in joinRoom transaction:', err);
         this.updatePresence(); 
         this.listenToRoom();
         this.broadcastActivity(`${this.profile?.alias || 'wanderer'} entered the corner`, '🚪');
@@ -1115,6 +1152,95 @@ export class SharedPresence {
       }
 
       return rooms;
+  }
+
+  async saveFavoriteRoom(roomCode: string, displayName: string, theme: string) {
+    if (!this.userId || !db) return;
+    const favRef = doc(db, 'artifacts', this.appId, 'users', this.userId, 'favorites', roomCode);
+    await setDoc(favRef, {
+      roomCode,
+      displayName,
+      theme,
+      savedAt: Date.now()
+    });
+  }
+
+  async removeFavoriteRoom(roomCode: string) {
+    if (!this.userId || !db) return;
+    const favRef = doc(db, 'artifacts', this.appId, 'users', this.userId, 'favorites', roomCode);
+    await deleteDoc(favRef);
+  }
+
+  listenToFavorites() {
+    if (!this.userId || !db) return;
+    
+    if (this.unsubFavoritesList) {
+      this.unsubFavoritesList();
+      this.unsubFavoritesList = null;
+    }
+    Object.values(this.favoritesUnsubs).forEach(unsub => unsub());
+    this.favoritesUnsubs = {};
+
+    const favsCol = collection(db, 'artifacts', this.appId, 'users', this.userId, 'favorites');
+    const q = query(favsCol, orderBy('savedAt', 'desc'));
+    
+    this.unsubFavoritesList = onSnapshot(q, (snap) => {
+      const currentFavs = snap.docs.map(d => d.data());
+      const newFavCodes = new Set(currentFavs.map(f => f.roomCode));
+
+      Object.keys(this.favoritesUnsubs).forEach(code => {
+        if (!newFavCodes.has(code)) {
+          this.favoritesUnsubs[code]();
+          delete this.favoritesUnsubs[code];
+        }
+      });
+
+      currentFavs.forEach(fav => {
+        const code = fav.roomCode;
+        if (!this.favoritesUnsubs[code]) {
+          const roomRef = doc(db!, 'artifacts', this.appId, 'public', 'data', 'rooms', code);
+          this.favoritesUnsubs[code] = onSnapshot(roomRef, (roomSnap) => {
+            if (roomSnap.exists()) {
+              const rData = roomSnap.data();
+              const target = this.favorites.find(f => f.roomCode === code);
+              if (target) {
+                target.activeCount = rData.activeCount || 0;
+                target.lastActiveAt = rData.lastActiveAt || 0;
+                this.bus.emit(APP_EVENTS.FAVORITES_UPDATED, this.favorites);
+              }
+            }
+          }, (err) => {
+            console.error(`Error listening to room metadata for fav ${code}:`, err);
+          });
+        }
+      });
+
+      this.favorites = currentFavs.map(fav => {
+        const code = fav.roomCode;
+        return {
+          roomCode: code,
+          displayName: fav.displayName,
+          theme: fav.theme,
+          savedAt: fav.savedAt,
+          activeCount: 0,
+          lastActiveAt: 0
+        };
+      });
+
+      this.bus.emit(APP_EVENTS.FAVORITES_UPDATED, this.favorites);
+    }, (err) => {
+      console.error('Error listening to user favorites:', err);
+    });
+  }
+
+  cleanupFavorites() {
+    if (this.unsubFavoritesList) {
+      this.unsubFavoritesList();
+      this.unsubFavoritesList = null;
+    }
+    Object.values(this.favoritesUnsubs).forEach(unsub => unsub());
+    this.favoritesUnsubs = {};
+    this.favorites = [];
   }
 }
 

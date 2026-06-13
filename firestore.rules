@@ -18,6 +18,11 @@ service cloud.firestore {
       allow write: if isOwner(userId); // Only the authenticated owner can write
     }
 
+    // 1b. User Favorites Subcollection
+    match /artifacts/{appId}/users/{userId}/favorites/{roomCode} {
+      allow read, write: if isOwner(userId);
+    }
+
     // 2. Room Root Document
     match /artifacts/{appId}/public/data/rooms/{roomCode} {
       allow read: if true; // Publicly readable so anyone can join
@@ -45,7 +50,9 @@ service cloud.firestore {
             'queueCount',
             'currentTapeTitle',
             'currentHost',
-            'isPrivate'
+            'isPrivate',
+            'visitorCount',
+            'visitCount'
           ]);
           
       allow delete: if false; // Room deletion is prohibited
@@ -111,6 +118,13 @@ service cloud.firestore {
       allow create: if isAuthenticated();
       allow update: if false;
       allow delete: if isAuthenticated() && resource.data.creatorUid == request.auth.uid;
+    }
+
+    // 10. Room Visitors Subcollection
+    match /artifacts/{appId}/public/data/rooms/{roomCode}/visitors/{userId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && userId == request.auth.uid;
+      allow update, delete: if false;
     }
   }
 }

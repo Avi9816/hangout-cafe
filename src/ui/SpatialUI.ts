@@ -4,6 +4,9 @@ import { Note, MemoryObject, QueueItem, RoomHistoryEvent, RoomMemory, RoomPhoto,
 import { $, $$, createSafeElement } from '../utils/dom';
 import { devLog } from '../utils/logger';
 import { uploadPhoto } from '../services/Presence';
+import { db } from '../config/firebase';
+import { doc, getDoc, collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
+import { ROOM_CONFIG } from '../constants/app';
 
 function formatTimeAgo(timestamp: number): string {
     const seconds = Math.floor((Date.now() - timestamp) / 1000);
@@ -92,6 +95,13 @@ export class SpatialUI {
               const activeTab = activeTabBtn ? activeTabBtn.getAttribute('data-explore-tab') || 'active' : 'active';
               this.loadAndRenderExploreRooms(activeTab);
           }
+      });
+      this.bus.on(APP_EVENTS.ROOM_PROFILE_REQUEST, (roomCode: string) => {
+          this.openRoomProfile(roomCode);
+      });
+      this.bus.on(APP_EVENTS.FAVORITES_UPDATED, (favorites: any[]) => {
+          console.log('[DEBUG_SPATIAL_UI] Received local:favorites_updated, count =', favorites.length);
+          this.renderFavorites(favorites);
       });
   }
 
@@ -226,6 +236,16 @@ export class SpatialUI {
             }
         });
     }
+
+    $('profile-modal-close')?.addEventListener('click', () => {
+        this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'soft_click');
+        const modal = $('room-profile-modal');
+        if (modal) modal.style.display = 'none';
+    });
+    $('profile-modal-overlay')?.addEventListener('click', () => {
+        const modal = $('room-profile-modal');
+        if (modal) modal.style.display = 'none';
+    });
   }
 
   setupTabListeners() {
@@ -334,11 +354,17 @@ export class SpatialUI {
             card.appendChild(timeMeta);
 
             const joinBtn = createSafeElement('button', 'text-btn explore-card-action', 'Enter room');
-            joinBtn.addEventListener('click', () => {
+            joinBtn.addEventListener('click', (e) => {
+                e.stopPropagation(); // Stop click from opening profile modal
                 this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'wood_creak');
                 this.bus.emit(APP_EVENTS.ROOM_JOIN_REQUEST, { room: room.roomCode, theme: room.theme });
             });
             card.appendChild(joinBtn);
+
+            card.addEventListener('click', () => {
+                this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'soft_click');
+                this.openRoomProfile(room.roomCode);
+            });
 
             frag.appendChild(card);
         });
@@ -906,6 +932,279 @@ export class SpatialUI {
 
         frag.appendChild(card);
     });
+    gridEl.appendChild(frag);
+  }
+
+  async openRoomProfile(roomCode: string) {
+    if (!db) return;
+    devLog('[ROOM_PROFILE] Opening profile for:', roomCode);
+    
+    const modal = $('room-profile-modal');
+    if (!modal) return;
+    
+    modal.style.display = 'flex';
+    
+    const titleEl = $('profile-room-title');
+    const themeEl = $('profile-room-theme');
+    const toggleFavBtn = $('btn-toggle-favorite') as HTMLButtonElement;
+    
+    const statCreated = $('profile-stat-created');
+    const statLastActive = $('profile-stat-last-active');
+    const statActive = $('profile-stat-active');
+    const statMemories = $('profile-stat-memories');
+    const statPhotos = $('profile-stat-photos');
+    const statQueue = $('profile-stat-queue');
+    const statVisitors = $('profile-stat-visitors');
+    const statVisits = $('profile-stat-visits');
+    
+    const nowPlayingSection = $('profile-now-playing-section');
+    const tapeTitleEl = $('profile-tape-title');
+    const tapeHostEl = $('profile-tape-host');
+    
+    const descEl = $('profile-description');
+    const historyPreviewEl = $('profile-history-preview');
+    const photosPreviewEl = $('profile-photos-preview');
+    const joinBtn = $('profile-btn-join');
+
+    if (titleEl) titleEl.textContent = roomCode;
+    if (themeEl) {
+      themeEl.textContent = 'loading...';
+      themeEl.className = 'badge-theme';
+    }
+    if (statCreated) statCreated.textContent = '-';
+    if (statLastActive) statLastActive.textContent = '-';
+    if (statActive) statActive.textContent = '-';
+    if (statMemories) statMemories.textContent = '-';
+    if (statPhotos) statPhotos.textContent = '-';
+    if (statQueue) statQueue.textContent = '-';
+    if (statVisitors) statVisitors.textContent = '-';
+    if (statVisits) statVisits.textContent = '-';
+    
+    if (nowPlayingSection) nowPlayingSection.style.display = 'none';
+    if (descEl) descEl.textContent = 'Looking for records of this corner...';
+    if (historyPreviewEl) historyPreviewEl.innerHTML = '<div style="opacity:0.5; font-size:0.75rem;">Loading history...</div>';
+    if (photosPreviewEl) photosPreviewEl.innerHTML = '<div style="opacity:0.5; font-size:0.75rem;">Loading photos...</div>';
+
+    const presence = (window as any).presence;
+    if (!presence) return;
+
+    let roomTheme = ['last-train', 'window-seat', 'between-pages', 'northern-lights'].includes(roomCode) ? roomCode : 'window-seat';
+
+    const isFav = presence.favorites.some((f: any) => f.roomCode === roomCode);
+    if (toggleFavBtn) {
+      toggleFavBtn.textContent = isFav ? '⭐ Saved' : '⭐ Save to Favorites';
+      toggleFavBtn.onclick = async () => {
+        this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'soft_click');
+        const isCurrentlyFav = presence.favorites.some((f: any) => f.roomCode === roomCode);
+        if (isCurrentlyFav) {
+          await presence.removeFavoriteRoom(roomCode);
+          toggleFavBtn.textContent = '⭐ Save to Favorites';
+        } else {
+          let displayName = roomCode;
+          const isPublic = ['last-train', 'window-seat', 'between-pages', 'northern-lights'].includes(roomCode);
+          if (isPublic) {
+            displayName = roomCode.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+          } else {
+            displayName = `corner: ${roomCode}`;
+          }
+          await presence.saveFavoriteRoom(roomCode, displayName, roomTheme);
+          toggleFavBtn.textContent = '⭐ Saved';
+        }
+      };
+    }
+
+    if (joinBtn) {
+      joinBtn.onclick = () => {
+        modal.style.display = 'none';
+        this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'wood_creak');
+        this.bus.emit(APP_EVENTS.ROOM_JOIN_REQUEST, { room: roomCode, theme: roomTheme });
+      };
+    }
+
+    try {
+      const appId = presence.appId;
+      const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomCode);
+      const roomSnap = await getDoc(roomRef);
+
+      const isPublic = ['last-train', 'window-seat', 'between-pages', 'northern-lights'].includes(roomCode);
+      const displayName = isPublic ? 
+          (roomCode.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')) : 
+          `corner: ${roomCode}`;
+      
+      let activeCount = 0;
+      let memoryCount = 0;
+      let photoCount = 0;
+      let queueCount = 0;
+      let visitorCount = 0;
+      let visitCount = 0;
+      let createdAt = Date.now();
+      let lastActiveAt = Date.now();
+      let tapeTitle = '';
+      let tapeHost = '';
+
+      if (roomSnap.exists()) {
+        const data = roomSnap.data();
+        if (titleEl) {
+          titleEl.textContent = isPublic ? (data.displayName || displayName) : roomCode;
+        }
+        roomTheme = data.theme || roomTheme;
+        activeCount = data.activeCount || 0;
+        memoryCount = data.memoryCount || 0;
+        photoCount = data.photoCount || 0;
+        queueCount = data.queueCount || 0;
+        visitorCount = data.visitorCount || 0;
+        visitCount = data.visitCount || 0;
+        createdAt = data.createdAt || createdAt;
+        lastActiveAt = data.lastActiveAt || lastActiveAt;
+        if (data.currentTapeTitle) {
+          tapeTitle = data.currentTapeTitle;
+          tapeHost = data.currentHost || 'wanderer';
+        }
+      } else {
+        if (titleEl) {
+          titleEl.textContent = isPublic ? displayName : roomCode;
+        }
+      }
+
+      if (themeEl) {
+        themeEl.textContent = roomTheme;
+      }
+
+      if (statCreated) statCreated.textContent = new Date(createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' });
+      if (statLastActive) statLastActive.textContent = formatTimeAgo(lastActiveAt);
+      if (statActive) statActive.textContent = String(activeCount);
+      if (statMemories) statMemories.textContent = String(memoryCount);
+      if (statPhotos) statPhotos.textContent = String(photoCount);
+      if (statQueue) statQueue.textContent = String(queueCount);
+      if (statVisitors) statVisitors.textContent = String(visitorCount);
+      if (statVisits) statVisits.textContent = String(visitCount);
+
+      if (tapeTitle && nowPlayingSection && tapeTitleEl && tapeHostEl) {
+        nowPlayingSection.style.display = 'flex';
+        tapeTitleEl.textContent = tapeTitle;
+        tapeHostEl.textContent = `host: ${tapeHost}`;
+      } else if (nowPlayingSection) {
+        nowPlayingSection.style.display = 'none';
+      }
+
+      if (descEl) {
+        if (ROOM_CONFIG[roomTheme]) {
+          descEl.textContent = ROOM_CONFIG[roomTheme].desc;
+        } else {
+          descEl.textContent = 'a quiet and atmospheric custom corner.';
+        }
+      }
+
+      const historyCol = collection(db, 'artifacts', appId, 'public', 'data', 'rooms', roomCode, 'history');
+      const historyQuery = query(historyCol, orderBy('createdAt', 'desc'), limit(5));
+      
+      const photosCol = collection(db, 'artifacts', appId, 'public', 'data', 'rooms', roomCode, 'photos');
+      const photosQuery = query(photosCol, orderBy('createdAt', 'desc'), limit(4));
+
+      const [historySnap, photosSnap] = await Promise.all([
+        getDocs(historyQuery).catch(() => null),
+        getDocs(photosQuery).catch(() => null)
+      ]);
+
+      if (historyPreviewEl) {
+        historyPreviewEl.innerHTML = '';
+        if (historySnap && !historySnap.empty) {
+          historySnap.forEach(d => {
+            const h = d.data();
+            const item = createSafeElement('div', 'history-preview-item');
+            const text = createSafeElement('span', 'history-preview-text', h.text || '');
+            const time = createSafeElement('span', 'history-preview-time', formatTimeAgo(h.createdAt || Date.now()));
+            item.appendChild(text);
+            item.appendChild(time);
+            historyPreviewEl.appendChild(item);
+          });
+        } else {
+          historyPreviewEl.innerHTML = '<div style="opacity:0.4; font-size:0.75rem; font-style:italic;">No history events logged yet.</div>';
+        }
+      }
+
+      if (photosPreviewEl) {
+        photosPreviewEl.innerHTML = '';
+        if (photosSnap && !photosSnap.empty) {
+          photosSnap.forEach(d => {
+            const p = d.data();
+            const mini = createSafeElement('div', 'profile-polaroid-mini');
+            
+            const img = document.createElement('img');
+            img.src = p.url || '';
+            img.alt = p.caption || 'Polaroid';
+            
+            const caption = createSafeElement('span', 'profile-polaroid-caption', p.caption || 'no caption');
+            
+            mini.appendChild(img);
+            mini.appendChild(caption);
+            photosPreviewEl.appendChild(mini);
+          });
+        } else {
+          photosPreviewEl.innerHTML = '<div style="opacity:0.4; font-size:0.75rem; font-style:italic; grid-column:1/-1;">No photos left behind yet.</div>';
+        }
+      }
+
+    } catch (err) {
+      console.error('[ROOM_PROFILE] Error loading profile data:', err);
+      if (descEl) descEl.textContent = 'Failed to load details for this corner.';
+    }
+  }
+
+  renderFavorites(favorites: any[]) {
+    const gridEl = $('favorites-grid');
+    if (!gridEl) return;
+
+    gridEl.innerHTML = '';
+    if (!favorites || favorites.length === 0) {
+      gridEl.innerHTML = `
+        <div style="grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; opacity: 0.4;">
+          <span style="font-size: 1.5rem; margin-bottom: 8px;">⭐</span>
+          <span style="font-size: 0.8rem; font-style: italic; font-family: var(--font-ui);">No saved rooms yet. Save your favorite corners to list them here.</span>
+        </div>
+      `;
+      return;
+    }
+
+    const frag = document.createDocumentFragment();
+    favorites.forEach(fav => {
+      const card = createSafeElement('div', 'favorite-card');
+      card.setAttribute('data-room-code', fav.roomCode);
+
+      const title = createSafeElement('div', 'favorite-card-title', fav.displayName || fav.roomCode);
+      card.appendChild(title);
+
+      const theme = createSafeElement('div', 'favorite-card-theme', `theme: ${fav.theme}`);
+      card.appendChild(theme);
+
+      const stats = createSafeElement('div', 'favorite-card-meta');
+      const activeStat = createSafeElement('span', '', `👤 ${fav.activeCount || 0} active`);
+      stats.appendChild(activeStat);
+      
+      if (fav.lastActiveAt) {
+        const timeAgo = formatTimeAgo(fav.lastActiveAt);
+        const lastActiveStat = createSafeElement('span', '', `active: ${timeAgo}`);
+        lastActiveStat.style.opacity = '0.6';
+        stats.appendChild(lastActiveStat);
+      }
+      card.appendChild(stats);
+
+      const joinBtn = createSafeElement('button', 'text-btn favorite-card-action', 'Enter room');
+      joinBtn.addEventListener('click', (e) => {
+        e.stopPropagation(); // Stop click from opening profile modal
+        this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'wood_creak');
+        this.bus.emit(APP_EVENTS.ROOM_JOIN_REQUEST, { room: fav.roomCode, theme: fav.theme });
+      });
+      card.appendChild(joinBtn);
+
+      card.addEventListener('click', () => {
+        this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'soft_click');
+        this.openRoomProfile(fav.roomCode);
+      });
+
+      frag.appendChild(card);
+    });
+
     gridEl.appendChild(frag);
   }
 }

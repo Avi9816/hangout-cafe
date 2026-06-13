@@ -6,6 +6,7 @@ export const APP_EVENTS = {
   // Room & World
   ROOM_JOIN_REQUEST: 'world:join_request',
   ROOM_CHANGED: 'world:room_changed',
+  ROOM_PROFILE_REQUEST: 'local:room_profile_request',
   TIME_TICK: 'world:time_tick',
   USER_COUNT_UPDATED: 'world:user_count',
 
@@ -24,6 +25,7 @@ export const APP_EVENTS = {
   SYNC_MEMORIES: 'sync:memories',
   SYNC_PHOTOS: 'sync:photos',
   AMBIENT_ACTION_RECEIVED: 'sync:action',
+  FAVORITES_UPDATED: 'local:favorites_updated',
 
   // Feedback (Engines -> UI)
   UI_SFX_REQUEST: 'ui:play_sfx',

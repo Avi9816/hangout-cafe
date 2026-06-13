@@ -37,7 +37,10 @@ class App {
     
     // 3. UI (Ready immediately)
     new AmbientFeed(this.bus);
-    new SpatialUI(this.bus);
+    const spatialUI = new SpatialUI(this.bus);
+    if (typeof window !== 'undefined') {
+        (window as any).spatialUI = spatialUI;
+    }
 
     // 4. Data Layer (Async Bootstrap)
     new SharedPresence(this.bus);
