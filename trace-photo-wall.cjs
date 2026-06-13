@@ -10,6 +10,15 @@ function sleep(ms) {
 }
 
 async function main() {
+    // Create a temporary 1x1 pixel PNG file for upload
+    const pngBuffer = Buffer.from([
+      137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 
+      0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 
+      0, 0, 0, 10, 73, 68, 65, 84, 120, 156, 99, 0, 1, 0, 0, 5, 
+      0, 1, 13, 10, 45, 180, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130
+    ]);
+    fs.writeFileSync('test-image.png', pngBuffer);
+
     let vite;
     let browser;
     let page1;
@@ -24,6 +33,7 @@ async function main() {
     async function cleanup() {
         console.log('\nCleaning up processes...');
         clearTimeout(globalTimeout);
+        try { fs.unlinkSync('test-image.png'); } catch (e) {}
         if (page1) { try { await page1.close(); } catch(e) {} }
         if (page2) { try { await page2.close(); } catch(e) {} }
         if (page3) { try { await page3.close(); } catch(e) {} }
@@ -116,17 +126,14 @@ async function main() {
                     get: () => mockWebTorrent,
                     configurable: false
                 });
-
-                // Mock uploadPhoto function globally to bypass real storage upload
-                window.mockUploadPhoto = (file) => {
-                    console.log('[MOCK_STORAGE] Uploading file:', file.name);
-                    return Promise.resolve(`https://images.unsplash.com/photo-1542038784456-1ea8e935640e?q=80&w=200&mockId=${Math.random().toString(36).substring(2,8)}`);
-                };
             });
         };
 
         await injectMock(page1);
         page1.on('console', msg => console.log(`[TAB 1 CONSOLE] ${msg.text()}`));
+        page1.on('requestfailed', request => {
+            console.log(`[TAB 1 REQ_FAILED] ${request.url()} - ${request.failure() ? request.failure().errorText : 'unknown error'}`);
+        });
 
         console.log('Navigating Tab 1...');
         await page1.goto(viteUrl, { waitUntil: 'domcontentloaded' });
@@ -158,6 +165,9 @@ async function main() {
         page2 = await context2.newPage();
         await injectMock(page2);
         page2.on('console', msg => console.log(`[TAB 2 CONSOLE] ${msg.text()}`));
+        page2.on('requestfailed', request => {
+            console.log(`[TAB 2 REQ_FAILED] ${request.url()} - ${request.failure() ? request.failure().errorText : 'unknown error'}`);
+        });
 
         console.log('Navigating Tab 2...');
         await page2.goto(viteUrl, { waitUntil: 'domcontentloaded' });
@@ -172,28 +182,33 @@ async function main() {
         }, { timeout: 10000 });
 
         console.log('Tab 2 joining room...');
-        await page2.type('#private-room-input', testRoomName);
-        await page2.click('#btn-create-private');
+        await page2.evaluate((room) => window.presence.joinRoom(room), testRoomName);
+        await page2.waitForFunction(() => {
+            const el = document.getElementById('btn-leave-private');
+            return el && el.style.display !== 'none';
+        }, { timeout: 10000 });
         await sleep(3000); // Wait for snapshot load
 
         console.log('\n--- VERIFICATION CHECKS ---');
 
-        // Check 1: Photo select and caption input
         console.log('Tab 1 selecting file and writing caption...');
         const fileInput = await page1.$('#photo-file-input');
-        // Upload package.json as a mock image file
-        await fileInput.uploadFile(path.join(__dirname, 'package.json'));
+        // Upload test-image.png as a real image file
+        await fileInput.uploadFile(path.join(__dirname, 'test-image.png'));
         await sleep(1000);
         
         const selectedFileName = await page1.evaluate(() => document.getElementById('selected-photo-name').textContent);
         console.log('Selected file name in UI:', selectedFileName);
-        const fileSelectedPass = selectedFileName === 'package.json';
+        const fileSelectedPass = selectedFileName === 'test-image.png';
         console.log(`Check 0 (File Selection Works): ${fileSelectedPass ? 'PASS' : 'FAIL'}`);
 
         await page1.type('#photo-caption-input', 'Late Night Coffee');
         await page1.click('#btn-upload-photo');
         console.log('Clicking upload...');
-        await sleep(4000); // Wait for upload + save photo + Firestore write
+        // Wait for peer tab (page2) to receive the photo sync
+        await page2.waitForFunction(() => {
+            return window.presence && window.presence.photos && window.presence.photos.length === 1;
+        }, { timeout: 10000 });
 
         // Check 2: Photo document written and synced in realtime
         const tab1Photos = await page1.evaluate(() => window.presence.photos || []);
@@ -209,6 +224,9 @@ async function main() {
         const photoUrl = tab1Photos[0].url;
 
         // Check 3: History event written
+        await page2.waitForFunction(() => {
+            return window.presence && window.presence.history && window.presence.history.some(h => h.type === 'photo_added' && h.text.includes('Tab1Host pinned a photograph'));
+        }, { timeout: 10000 });
         const historyList = await page2.evaluate(() => window.presence.history || []);
         console.log('History List Text:', historyList.map(h => h.text));
         const historyLoggedPass = historyList.some(h => h.type === 'photo_added' && h.text.includes('Tab1Host pinned a photograph'));
@@ -228,6 +246,10 @@ async function main() {
         const deleteBlockPass = await page2.evaluate(async (id) => {
             const p = window.presence;
             const fs = window._firestore;
+            if (!p.roomCode) {
+                console.error('ERROR: p.roomCode is null in Tab 2 check 5');
+                return false;
+            }
             const docRef = fs.doc(p.db, 'artifacts', p.appId, 'public', 'data', 'rooms', p.roomCode, 'photos', id);
             try {
                 await fs.deleteDoc(docRef);
@@ -251,11 +273,14 @@ async function main() {
         // Upload another photo to test Empty Room Restoration
         console.log('Tab 1 uploading second photo to test restoration...');
         const fileInput2 = await page1.$('#photo-file-input');
-        await fileInput2.uploadFile(path.join(__dirname, 'package.json'));
+        await fileInput2.uploadFile(path.join(__dirname, 'test-image.png'));
         await sleep(1000);
         await page1.type('#photo-caption-input', 'Restored Polaroid');
         await page1.click('#btn-upload-photo');
-        await sleep(4000);
+        // Wait for upload and local state sync
+        await page1.waitForFunction(() => {
+            return window.presence && window.presence.photos && window.presence.photos.length === 2;
+        }, { timeout: 10000 });
 
         const tab1PhotosAfter = await page1.evaluate(() => window.presence.photos || []);
         console.log('Photos count after 2nd upload:', tab1PhotosAfter.length);
@@ -273,6 +298,9 @@ async function main() {
         page3 = await context3.newPage();
         await injectMock(page3);
         page3.on('console', msg => console.log(`[TAB 3 CONSOLE] ${msg.text()}`));
+        page3.on('requestfailed', request => {
+            console.log(`[TAB 3 REQ_FAILED] ${request.url()} - ${request.failure() ? request.failure().errorText : 'unknown error'}`);
+        });
 
         console.log('Navigating Tab 3...');
         await page3.goto(viteUrl, { waitUntil: 'domcontentloaded' });
@@ -287,9 +315,15 @@ async function main() {
         }, { timeout: 10000 });
 
         console.log('Tab 3 joining the empty room...');
-        await page3.type('#private-room-input', testRoomName);
-        await page3.click('#btn-create-private');
-        await sleep(4000); // Wait for restoration
+        await page3.evaluate((room) => window.presence.joinRoom(room), testRoomName);
+        await page3.waitForFunction(() => {
+            const el = document.getElementById('btn-leave-private');
+            return el && el.style.display !== 'none';
+        }, { timeout: 10000 });
+        // Wait for empty room restoration to sync
+        await page3.waitForFunction(() => {
+            return window.presence && window.presence.photos && window.presence.photos.length === 2;
+        }, { timeout: 10000 });
 
         const tab3Photos = await page3.evaluate(() => window.presence.photos || []);
         console.log('Tab 3 photos restored:', tab3Photos.map(p => p.caption));
@@ -301,6 +335,10 @@ async function main() {
         const editBlockPass = await page3.evaluate(async (id) => {
             const p = window.presence;
             const fs = window._firestore;
+            if (!p.roomCode) {
+                console.error('ERROR: p.roomCode is null in Tab 3 check 8');
+                return false;
+            }
             const docRef = fs.doc(p.db, 'artifacts', p.appId, 'public', 'data', 'rooms', p.roomCode, 'photos', id);
             try {
                 await fs.updateDoc(docRef, { caption: 'hacked caption' });
@@ -316,6 +354,10 @@ async function main() {
         const roomDocData = await page3.evaluate(async () => {
             const p = window.presence;
             const fs = window._firestore;
+            if (!p.roomCode) {
+                console.error('ERROR: p.roomCode is null in Tab 3 check 9');
+                return null;
+            }
             const docRef = fs.doc(p.db, 'artifacts', p.appId, 'public', 'data', 'rooms', p.roomCode);
             const snap = await fs.getDoc(docRef);
             return snap.exists() ? snap.data() : null;
@@ -329,6 +371,10 @@ async function main() {
         const tab3DeleteBlock = await page3.evaluate(async (id) => {
             const p = window.presence;
             const fs = window._firestore;
+            if (!p.roomCode) {
+                console.error('ERROR: p.roomCode is null in Tab 3 check 10');
+                return false;
+            }
             const docRef = fs.doc(p.db, 'artifacts', p.appId, 'public', 'data', 'rooms', p.roomCode, 'photos', id);
             try {
                 await fs.deleteDoc(docRef);

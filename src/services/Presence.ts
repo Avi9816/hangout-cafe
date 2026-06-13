@@ -963,8 +963,10 @@ export async function uploadPhoto(file: File): Promise<string> {
   if (typeof window !== 'undefined' && (window as any).mockUploadPhoto) {
     return (window as any).mockUploadPhoto(file);
   }
+  const presence = (window as any).presence;
+  const roomCode = presence?.roomCode || 'default-room';
   const storage = getStorage();
-  const storageRef = ref(storage, `photos/${Date.now()}_${file.name}`);
+  const storageRef = ref(storage, `photos/${roomCode}/${Date.now()}_${file.name}`);
   const snapshot = await uploadBytes(storageRef, file);
   return await getDownloadURL(snapshot.ref);
 }
