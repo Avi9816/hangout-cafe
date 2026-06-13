@@ -33,7 +33,19 @@ service cloud.firestore {
             'latestAction', 
             'notes',    // TEMPORARY BRIDGE FIELD: Deprecate after legacy note clients migrate
             'objects',  // TEMPORARY BRIDGE FIELD: Deprecate after legacy object clients migrate
-            'presence'  // TEMPORARY BRIDGE FIELD: Deprecate after legacy presence clients migrate
+            'presence', // TEMPORARY BRIDGE FIELD: Deprecate after legacy presence clients migrate
+            'roomCode',
+            'displayName',
+            'createdAt',
+            'updatedAt',
+            'lastActiveAt',
+            'activeCount',
+            'memoryCount',
+            'photoCount',
+            'queueCount',
+            'currentTapeTitle',
+            'currentHost',
+            'isPrivate'
           ]);
           
       allow delete: if false; // Room deletion is prohibited

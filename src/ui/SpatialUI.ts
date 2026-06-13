@@ -1,6 +1,6 @@
 import { EventBus } from '../core/EventBus';
 import { APP_EVENTS } from '../core/events';
-import { Note, MemoryObject, QueueItem, RoomHistoryEvent, RoomMemory, RoomPhoto } from '../types';
+import { Note, MemoryObject, QueueItem, RoomHistoryEvent, RoomMemory, RoomPhoto, RoomDirectoryItem } from '../types';
 import { $, $$, createSafeElement } from '../utils/dom';
 import { devLog } from '../utils/logger';
 import { uploadPhoto } from '../services/Presence';
@@ -43,6 +43,7 @@ export class SpatialUI {
 
     this.setupListeners();
     this.setupTabListeners();
+    this.setupExploreListeners();
     this.setupBusListeners();
     
     // Initial clear
@@ -84,6 +85,13 @@ export class SpatialUI {
           this.photos = Array.isArray(photos) ? photos : [];
           this.renderPhotos();
           this.renderMemories(); // Refresh memories because photos are merged
+      });
+      this.bus.on(APP_EVENTS.ROOM_CHANGED, (data: any) => {
+          if (!data.isPrivate) {
+              const activeTabBtn = $('.explore-tab.active');
+              const activeTab = activeTabBtn ? activeTabBtn.getAttribute('data-explore-tab') || 'active' : 'active';
+              this.loadAndRenderExploreRooms(activeTab);
+          }
       });
   }
 
@@ -231,6 +239,117 @@ export class SpatialUI {
             $(`pane-${targetId}`)?.classList.add('active');
         });
     });
+  }
+
+  setupExploreListeners() {
+    $$('.explore-tab').forEach(tab => {
+        tab.addEventListener('click', (e) => {
+            this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'soft_click');
+            const targetTab = (e.currentTarget as HTMLElement).dataset.exploreTab;
+            if (!targetTab) return;
+            $$('.explore-tab').forEach(t => {
+                t.classList.remove('active');
+                t.setAttribute('aria-selected', 'false');
+            });
+            tab.classList.add('active');
+            tab.setAttribute('aria-selected', 'true');
+            this.loadAndRenderExploreRooms(targetTab);
+        });
+    });
+  }
+
+  async loadAndRenderExploreRooms(tab: string) {
+    console.log('[DEBUG_EXPLORE] loadAndRenderExploreRooms called with tab:', tab);
+    const gridEl = $('explore-grid');
+    if (!gridEl) {
+        console.log('[DEBUG_EXPLORE] explore-grid element not found!');
+        return;
+    }
+
+    gridEl.style.opacity = '0.5';
+
+    const presence = (window as any).presence;
+    if (!presence) {
+        console.log('[DEBUG_EXPLORE] window.presence not found!');
+        return;
+    }
+
+    try {
+        console.log('[DEBUG_EXPLORE] Calling loadExploreRooms...');
+        const rooms = await presence.loadExploreRooms(tab);
+        console.log('[DEBUG_EXPLORE] loadExploreRooms returned rooms:', JSON.stringify(rooms));
+        gridEl.innerHTML = '';
+        
+        if (!rooms || rooms.length === 0) {
+            gridEl.innerHTML = `
+                <div style="grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px; text-align: center; opacity: 0.4;">
+                    <span style="font-size: 1.8rem; margin-bottom: 8px;">🌌</span>
+                    <span style="font-size: 0.8rem; font-style: italic; font-family: var(--font-ui);">no active rooms found under this filter...</span>
+                </div>
+            `;
+            return;
+        }
+
+        const frag = document.createDocumentFragment();
+        rooms.forEach((room: RoomDirectoryItem) => {
+            const card = createSafeElement('div', 'explore-card');
+            card.setAttribute('data-room-code', room.roomCode);
+            
+            const title = createSafeElement('div', 'explore-card-title', room.displayName || room.roomCode);
+            card.appendChild(title);
+
+            const theme = createSafeElement('div', 'explore-card-theme', `theme: ${room.theme}`);
+            card.appendChild(theme);
+
+            const stats = createSafeElement('div', 'explore-card-stats');
+            
+            const activeStat = createSafeElement('span', 'explore-stat-item', `👤 ${room.activeCount || 0} active`);
+            stats.appendChild(activeStat);
+
+            const memoryStat = createSafeElement('span', 'explore-stat-item', `📌 ${room.memoryCount || 0} memories`);
+            stats.appendChild(memoryStat);
+
+            const photoStat = createSafeElement('span', 'explore-stat-item', `📸 ${room.photoCount || 0} photos`);
+            stats.appendChild(photoStat);
+
+            card.appendChild(stats);
+
+            if (room.currentTapeTitle) {
+                const playing = createSafeElement('div', 'explore-card-playing', `📼 playing: ${room.currentTapeTitle}`);
+                if (room.currentHost) {
+                    const hostSpan = createSafeElement('span', '', ` (host: ${room.currentHost})`);
+                    hostSpan.style.opacity = '0.6';
+                    hostSpan.style.fontSize = '0.7rem';
+                    playing.appendChild(hostSpan);
+                }
+                card.appendChild(playing);
+            }
+
+            const timeAgo = formatTimeAgo(room.lastActiveAt || room.createdAt);
+            const timeMeta = createSafeElement('div', '', `last active: ${timeAgo}`);
+            timeMeta.style.fontSize = '0.7rem';
+            timeMeta.style.opacity = '0.4';
+            timeMeta.style.fontStyle = 'italic';
+            timeMeta.style.marginTop = '4px';
+            card.appendChild(timeMeta);
+
+            const joinBtn = createSafeElement('button', 'text-btn explore-card-action', 'Enter room');
+            joinBtn.addEventListener('click', () => {
+                this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'wood_creak');
+                this.bus.emit(APP_EVENTS.ROOM_JOIN_REQUEST, { room: room.roomCode, theme: room.theme });
+            });
+            card.appendChild(joinBtn);
+
+            frag.appendChild(card);
+        });
+        
+        gridEl.appendChild(frag);
+    } catch (err) {
+        console.error('Failed to load explore rooms:', err);
+        gridEl.innerHTML = `<div style="grid-column: 1 / -1; color: var(--accent); font-size: 0.8rem; text-align: center;">failed to load explore list.</div>`;
+    } finally {
+        gridEl.style.opacity = '1';
+    }
   }
 
   renderWall() {

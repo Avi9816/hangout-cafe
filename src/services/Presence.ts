@@ -2,9 +2,9 @@ import { EventBus } from '../core/EventBus';
 import { APP_EVENTS } from '../core/events';
 import { LifecycleManager } from '../core/Lifecycle';
 import { db, initFirebase } from '../config/firebase';
-import { doc, setDoc, getDoc, onSnapshot, Unsubscribe, updateDoc, deleteField, collection, addDoc, query, orderBy, limit, getDocs, deleteDoc, runTransaction } from 'firebase/firestore';
+import { doc, setDoc, getDoc, onSnapshot, Unsubscribe, updateDoc, deleteField, collection, addDoc, query, orderBy, limit, getDocs, deleteDoc, runTransaction, where, increment } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { UserProfile, Note, MemoryObject, QueueItem, RoomHistoryEvent, RoomMemory, RoomPhoto } from '../types';
+import { UserProfile, Note, MemoryObject, QueueItem, RoomHistoryEvent, RoomMemory, RoomPhoto, RoomDirectoryItem } from '../types';
 import { $ } from '../utils/dom'; 
 import { debounce as debounceUtil } from '../utils/timing';
 import { devLog } from '../utils/logger';
@@ -159,7 +159,10 @@ export class SharedPresence {
                         hostId,
                         host: this.profile?.alias || 'wanderer', 
                         sender: this.userId 
-                    } 
+                    },
+                    currentTapeTitle: data.title || 'unnamed tape',
+                    currentHost: this.profile?.alias || 'wanderer',
+                    updatedAt: Date.now()
                 }, { merge: true });
                 
                 if (isUrlChanging) {
@@ -295,7 +298,9 @@ export class SharedPresence {
 
     const ref = doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode);
     updateDoc(ref, {
-        [`presence.${this.userId}`]: deleteField()
+        [`presence.${this.userId}`]: deleteField(),
+        activeCount: increment(-1),
+        lastActiveAt: Date.now()
     }).catch(err => console.warn("Failed to clean up presence on leaveRoom:", err));
 
     const presDocRef = doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'presence', this.userId);
@@ -334,13 +339,41 @@ export class SharedPresence {
     getDoc(roomRef).then(async (snap) => {
         if (!snap.exists()) {
             const initialTheme = theme || (isPublic ? roomKey : 'window-seat');
-            await setDoc(roomRef, { theme: initialTheme }, { merge: true });
+            const displayName = isPublic ? 
+                (roomKey.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')) : 
+                `corner: ${roomKey}`;
+            await setDoc(roomRef, {
+                roomCode: roomKey,
+                displayName: displayName,
+                theme: initialTheme,
+                createdAt: Date.now(),
+                updatedAt: Date.now(),
+                lastActiveAt: Date.now(),
+                activeCount: 1,
+                memoryCount: 0,
+                photoCount: 0,
+                queueCount: 0,
+                isPrivate: !isPublic
+            }, { merge: true });
             this.addHistoryEvent('room_created', `Room created with theme "${initialTheme}"`);
         } else {
+            const data = snap.data();
+            const updates: any = {
+                lastActiveAt: Date.now(),
+                updatedAt: Date.now()
+            };
+            if (!data.roomCode) updates.roomCode = roomKey;
+            if (!data.displayName) {
+                updates.displayName = isPublic ? 
+                    (roomKey.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')) : 
+                    `corner: ${roomKey}`;
+            }
+            if (data.isPrivate === undefined) updates.isPrivate = !isPublic;
             if (!isPublic && theme) {
                 devLog('[THEME_SAVED]', theme);
-                await setDoc(roomRef, { theme }, { merge: true }).catch(err => console.error('[FIRESTORE_ROOM_WRITE] private room metadata write ERROR:', err));
+                updates.theme = theme;
             }
+            await updateDoc(roomRef, updates).catch(err => console.error('[FIRESTORE_ROOM_WRITE] private room metadata write ERROR:', err));
         }
         this.updatePresence(); 
         this.listenToRoom();
@@ -356,7 +389,12 @@ export class SharedPresence {
   updatePresence() {
     if(!this.userId || !db || !this.profile || !this.roomCode) return;
     console.log('[FIRESTORE_ROOM_WRITE] updatePresence start for user:', this.userId, 'room:', this.roomCode);
-    setDoc(doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode), { presence: { [this.userId]: { alias: this.profile.alias, time: Date.now() } } }, { merge: true })
+    const activeCount = Object.keys(this.activeUsers).length || 1;
+    setDoc(doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode), { 
+        presence: { [this.userId]: { alias: this.profile.alias, time: Date.now() } },
+        lastActiveAt: Date.now(),
+        activeCount: activeCount
+    }, { merge: true })
       .then(() => console.log('[FIRESTORE_ROOM_WRITE] updatePresence SUCCESS'))
       .catch(err => console.error('[FIRESTORE_ROOM_WRITE] updatePresence ERROR:', err));
 
@@ -555,16 +593,37 @@ export class SharedPresence {
                 };
             }
         });
-        this.bus.emit(APP_EVENTS.USER_COUNT_UPDATED, Object.keys(this.activeUsers).length);
+        const currentCount = Object.keys(this.activeUsers).length;
+        this.bus.emit(APP_EVENTS.USER_COUNT_UPDATED, currentCount);
         this.renderPresenceUI();
 
         // Host Continuity Check
         this.checkHostContinuity();
+
+        // Sync activeCount and lastActiveAt on root document if we are the oldest active user
+        const activeEntries = Object.entries(this.activeUsers);
+        if (activeEntries.length > 0) {
+            activeEntries.sort((a, b) => (a[1].joinedAt || 0) - (b[1].joinedAt || 0));
+            const oldestUid = activeEntries[0][0];
+            if (oldestUid === this.userId) {
+                const roomRef = doc(db!, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode!);
+                updateDoc(roomRef, {
+                    activeCount: currentCount,
+                    lastActiveAt: Date.now()
+                }).catch(err => devLog('Oldest user failed to sync activeCount:', err));
+            }
+        }
       } else {
         if (this.useSubcollectionPresence) {
             this.activeUsers = {};
             this.bus.emit(APP_EVENTS.USER_COUNT_UPDATED, 0);
             this.renderPresenceUI();
+
+            // Sync activeCount to 0
+            const roomRef = doc(db!, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode!);
+            updateDoc(roomRef, {
+                activeCount: 0
+            }).catch(err => devLog('Failed to sync activeCount to 0:', err));
         }
       }
     }, (err) => {
@@ -718,6 +777,12 @@ export class SharedPresence {
           addedBy: this.profile?.alias || 'wanderer',
           addedAt: Date.now(),
           status: 'pending'
+      }).then(async () => {
+          const roomRef = doc(db!, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode!);
+          await updateDoc(roomRef, {
+              queueCount: increment(1),
+              updatedAt: Date.now()
+          }).catch(err => console.error('Error updating queueCount:', err));
       }).catch(err => console.error('[QUEUE_OPERATION] Error enqueuing media:', err));
   }
 
@@ -743,6 +808,8 @@ export class SharedPresence {
 
       const type = targetItem.url.includes('youtube.com') || targetItem.url.includes('youtu.be') ? 'youtube' : 'magnet';
       const ref = doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode);
+      const remainingQueueCount = this.queue.filter(q => q.id !== itemId && q.status === 'pending').length;
+
       await setDoc(ref, {
           video: {
               type,
@@ -754,7 +821,11 @@ export class SharedPresence {
               hostId: this.userId,
               host: this.profile?.alias || 'wanderer',
               sender: this.userId
-          }
+          },
+          currentTapeTitle: targetItem.title,
+          currentHost: this.profile?.alias || 'wanderer',
+          queueCount: remainingQueueCount,
+          updatedAt: Date.now()
       }, { merge: true }).then(() => {
           this.addHistoryEvent('tape_played', `Started playing queued tape "${targetItem.title}"`);
       }).catch(err => console.error('[QUEUE_OPERATION] Error updating root video state:', err));
@@ -784,6 +855,8 @@ export class SharedPresence {
 
           const type = nextItem.url.includes('youtube.com') || nextItem.url.includes('youtu.be') ? 'youtube' : 'magnet';
           const ref = doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode);
+          const remainingQueueCount = this.queue.filter(q => q.id !== nextItem.id && q.status === 'pending').length;
+
           await setDoc(ref, {
               video: {
                   type,
@@ -795,7 +868,11 @@ export class SharedPresence {
                   hostId: this.userId,
                   host: this.profile?.alias || 'wanderer',
                   sender: this.userId
-              }
+              },
+              currentTapeTitle: nextItem.title,
+              currentHost: this.profile?.alias || 'wanderer',
+              queueCount: remainingQueueCount,
+              updatedAt: Date.now()
           }, { merge: true }).then(() => {
               this.addHistoryEvent('tape_played', `Queue auto-advanced to "${nextItem.title}"`);
           }).catch(err => console.error('[QUEUE_OPERATION] Error updating root video state:', err));
@@ -803,7 +880,11 @@ export class SharedPresence {
           devLog('[QUEUE_OPERATION] No pending items left in queue. Clearing root video.');
           const ref = doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode);
           await updateDoc(ref, {
-              video: deleteField()
+              video: deleteField(),
+              currentTapeTitle: deleteField(),
+              currentHost: deleteField(),
+              queueCount: 0,
+              updatedAt: Date.now()
           }).catch(err => console.error('[QUEUE_OPERATION] Error clearing root video:', err));
       }
   }
@@ -838,7 +919,9 @@ export class SharedPresence {
                                   transaction.update(roomRef, {
                                       'video.hostId': this.userId,
                                       'video.host': this.profile?.alias || 'wanderer',
-                                      'video.sender': this.userId
+                                      'video.sender': this.userId,
+                                      currentHost: this.profile?.alias || 'wanderer',
+                                      updatedAt: Date.now()
                                   });
                               } else {
                                   devLog('[HOST_CONTINUITY] Takeover aborted: hostId already changed.');
@@ -882,6 +965,12 @@ export class SharedPresence {
           createdBy: this.profile?.alias || 'wanderer',
           creatorUid: this.userId,
           payload: memory.payload
+      }).then(() => {
+          const roomRef = doc(db!, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode!);
+          updateDoc(roomRef, {
+              memoryCount: increment(1),
+              updatedAt: Date.now()
+          }).catch(err => console.error('Error updating memoryCount:', err));
       }).catch(err => console.error('[ROOM_MEMORIES] Error saving memory:', err));
   }
 
@@ -889,7 +978,13 @@ export class SharedPresence {
       if (!this.userId || !db || !this.roomCode) return;
       devLog('[ROOM_MEMORIES] Removing memory:', memoryId);
       const memoryRef = doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'memories', memoryId);
-      await deleteDoc(memoryRef).catch(err => console.error('[ROOM_MEMORIES] Error removing memory:', err));
+      await deleteDoc(memoryRef).then(() => {
+          const roomRef = doc(db!, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode!);
+          updateDoc(roomRef, {
+              memoryCount: increment(-1),
+              updatedAt: Date.now()
+          }).catch(err => console.error('Error updating memoryCount on delete:', err));
+      }).catch(err => console.error('[ROOM_MEMORIES] Error removing memory:', err));
   }
 
   async loadRoomMemories(): Promise<RoomMemory[]> {
@@ -926,8 +1021,14 @@ export class SharedPresence {
           uploadedBy: alias,
           creatorUid: this.userId,
           createdAt: Date.now()
-      }).then(() => {
+      }).then(async () => {
           this.addHistoryEvent('photo_added', `${alias} pinned a photograph`);
+          
+          const roomRef = doc(db!, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode!);
+          await updateDoc(roomRef, {
+              photoCount: increment(1),
+              updatedAt: Date.now()
+          }).catch(err => console.error('Error updating photoCount:', err));
       }).catch(err => console.error('[ROOM_PHOTOS] Error saving photo:', err));
   }
 
@@ -935,7 +1036,13 @@ export class SharedPresence {
       if (!this.userId || !db || !this.roomCode) return;
       devLog('[ROOM_PHOTOS] Deleting photo:', photoId);
       const photoRef = doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'photos', photoId);
-      await deleteDoc(photoRef).catch(err => console.error('[ROOM_PHOTOS] Error deleting photo:', err));
+      await deleteDoc(photoRef).then(async () => {
+          const roomRef = doc(db!, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode!);
+          await updateDoc(roomRef, {
+              photoCount: increment(-1),
+              updatedAt: Date.now()
+          }).catch(err => console.error('Error updating photoCount on delete:', err));
+      }).catch(err => console.error('[ROOM_PHOTOS] Error deleting photo:', err));
   }
 
   async loadPhotos(): Promise<RoomPhoto[]> {
@@ -956,6 +1063,58 @@ export class SharedPresence {
               createdAt: data.createdAt || 0
           } as RoomPhoto;
       });
+  }
+
+  async loadExploreRooms(tab: string): Promise<RoomDirectoryItem[]> {
+      if (!db) return [];
+      const roomsCol = collection(db, 'artifacts', this.appId, 'public', 'data', 'rooms');
+      let q;
+      if (tab === 'active') {
+          q = query(roomsCol, where('activeCount', '>', 0), orderBy('activeCount', 'desc'), limit(20));
+      } else if (tab === 'recent') {
+          q = query(roomsCol, orderBy('lastActiveAt', 'desc'), limit(20));
+      } else if (tab === 'memories') {
+          q = query(roomsCol, orderBy('memoryCount', 'desc'), limit(20));
+      } else if (tab === 'photos') {
+          q = query(roomsCol, orderBy('photoCount', 'desc'), limit(20));
+      } else if (tab === 'watching') {
+          q = query(roomsCol, where('currentTapeTitle', '!=', null), limit(50));
+      } else {
+          q = query(roomsCol, orderBy('lastActiveAt', 'desc'), limit(20));
+      }
+
+      const snap = await getDocs(q).catch(() => null);
+      if (!snap) return [];
+
+      let rooms = snap.docs.map(doc => {
+          const data = doc.data();
+          return {
+              roomCode: doc.id,
+              displayName: data.displayName || doc.id,
+              theme: data.theme || 'window-seat',
+              createdAt: data.createdAt || 0,
+              updatedAt: data.updatedAt || 0,
+              lastActiveAt: data.lastActiveAt || 0,
+              activeCount: data.activeCount || 0,
+              memoryCount: data.memoryCount || 0,
+              photoCount: data.photoCount || 0,
+              queueCount: data.queueCount || 0,
+              currentTapeTitle: data.currentTapeTitle,
+              currentHost: data.currentHost,
+              isPrivate: data.isPrivate || false
+          } as RoomDirectoryItem;
+      });
+
+      // Filter out private rooms
+      rooms = rooms.filter(r => !r.isPrivate);
+
+      // In-memory sort for currently watching to avoid composite index requirements
+      if (tab === 'watching') {
+          rooms.sort((a, b) => b.updatedAt - a.updatedAt);
+          rooms = rooms.slice(0, 20);
+      }
+
+      return rooms;
   }
 }
 

@@ -103,3 +103,19 @@ declare global {
     WebTorrent?: any;
   }
 }
+
+export interface RoomDirectoryItem {
+  roomCode: string;
+  displayName: string;
+  theme: string;
+  createdAt: number;
+  updatedAt: number;
+  lastActiveAt: number;
+  activeCount: number;
+  memoryCount: number;
+  photoCount: number;
+  queueCount: number;
+  currentTapeTitle?: string;
+  currentHost?: string;
+  isPrivate: boolean;
+}
