@@ -170,9 +170,7 @@ export class FirstNightGuide {
     // Dismiss automatically if entering a room
     if (data && data.room !== null) {
       if (this.isOpen) {
-        this.close();
-        // Since user exited lobby by choosing a room, mark as seen
-        localStorage.setItem(LOCAL_STORAGE_KEY, GUIDE_VERSION);
+        this.skip();
       }
     }
   }
