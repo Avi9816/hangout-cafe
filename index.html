@@ -70,6 +70,11 @@
       <h1 class="lobby-title">Late Night Café</h1>
       <p class="lobby-tagline">A late-night room that remembers who passed through.</p>
       <small class="lobby-mood">Choose a corner. The room will remember.</small>
+      <div class="lobby-guide-container">
+        <button class="text-btn guide-replay-btn" id="btn-replay-guide" aria-label="Replay First Night Guide">
+          First Night Guide
+        </button>
+      </div>
     </div>
 
     <section class="cinematic-space" id="doorway-section" aria-label="Room Selection">
@@ -107,7 +112,7 @@
         </div>
       </div>
 
-      <div style="margin-top: 80px; padding-top: 40px; border-top: 1px solid var(--border-soft);">
+      <div id="private-room-section" style="margin-top: 80px; padding-top: 40px; border-top: 1px solid var(--border-soft);">
         <h2 class="section-heading">Private Space</h2>
         <p class="subtitle" style="margin-bottom: 24px;">Create or join a hidden room</p>
         
@@ -122,6 +127,7 @@
         <button class="text-btn" id="btn-create-private" aria-label="Join private room">step into the dark</button>
       </div>
     </section>
+    <div id="first-night-guide-container"></div>
   </div>
 
   <div id="room-view" class="view-transition view-hidden">

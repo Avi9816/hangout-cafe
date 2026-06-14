@@ -5,6 +5,7 @@ import { AudioEngine } from './engines/AudioEngine';
 import { Environment } from './engines/Environment';
 import { Cinematography } from './engines/Cinematography';
 import { SpatialUI } from './ui/SpatialUI';
+import { FirstNightGuide } from './ui/FirstNightGuide';
 import { SharedPresence } from './services/Presence';
 import { YouTubeSync } from './media/YouTubeSync';
 import { SpotifyPlayer } from './media/SpotifyPlayer';
@@ -40,6 +41,16 @@ class App {
     const spatialUI = new SpatialUI(this.bus);
     if (typeof window !== 'undefined') {
         (window as any).spatialUI = spatialUI;
+    }
+
+    const firstNightGuide = new FirstNightGuide(this.bus);
+    firstNightGuide.init();
+
+    if (import.meta.env.DEV) {
+        (window as any).__resetFirstNightGuide = () => {
+            localStorage.removeItem("lateNightCafe.firstNightGuide.version");
+            firstNightGuide.reset();
+        };
     }
 
     // 4. Data Layer (Async Bootstrap)

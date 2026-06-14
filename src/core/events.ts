@@ -29,7 +29,13 @@ export const APP_EVENTS = {
 
   // Feedback (Engines -> UI)
   UI_SFX_REQUEST: 'ui:play_sfx',
-  FEED_PUSH_REQUEST: 'ui:feed_push'
+  FEED_PUSH_REQUEST: 'ui:feed_push',
+
+  // Onboarding
+  GUIDE_STARTED: 'guide:started',
+  GUIDE_COMPLETED: 'guide:completed',
+  GUIDE_SKIPPED: 'guide:skipped',
+  GUIDE_STEP_CHANGED: 'guide:step_changed'
 } as const;
 
 export type AppEvent = typeof APP_EVENTS[keyof typeof APP_EVENTS];

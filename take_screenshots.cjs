@@ -49,19 +49,29 @@ async function takeScreenshots() {
     if (feed) feed.style.display = 'none';
   });
 
+  // Open guide manually to ensure it is visible in the screenshots
+  console.log("Opening First Night Guide...");
+  await page.click('#btn-replay-guide');
+  await sleep(1000);
+
   console.log("Screenshot 1: lobby-top");
   await page.screenshot({ path: OUT_DIR + 'lobby-top.png' });
 
-  // Scroll lobby down
+  // Advance to Step 2 (Choose a corner) to show highlights
+  console.log("Advancing to Step 2 (Highlights)...");
+  await page.click('#btn-guide-next');
+  await sleep(1000);
+
+  // Scroll lobby down to show private corner highlights
   console.log("Scrolling lobby down...");
   await page.evaluate(() => window.scrollBy(0, 400));
-  await sleep(800);
+  await sleep(1000);
   console.log("Screenshot 2: lobby-scrolled");
   await page.screenshot({ path: OUT_DIR + 'lobby-scrolled.png' });
 
   // Scroll back up
   await page.evaluate(() => window.scrollTo(0, 0));
-  await sleep(300);
+  await sleep(500);
 
   // Join Window Seat
   console.log("Entering room Window Seat...");

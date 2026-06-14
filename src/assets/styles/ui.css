@@ -781,6 +781,168 @@ h2 { font-family: var(--font-ui); font-size: clamp(1.8rem, 6vw, 2.2rem); font-we
   }
 }
 
+/* ============================================================
+   FIRST NIGHT GUIDE ONBOARDING
+   ============================================================ */
+.lobby-guide-container {
+  margin-top: 12px;
+}
+
+.guide-replay-btn {
+  font-size: 0.75rem;
+  opacity: 0.5;
+  padding: 4px 8px;
+  font-weight: 500;
+  text-transform: lowercase;
+}
+
+#first-night-guide-container {
+  position: fixed;
+  inset: auto 24px 24px auto;
+  z-index: 100;
+  pointer-events: none;
+}
+
+.guide-card {
+  pointer-events: auto;
+  width: min(420px, calc(100vw - 32px));
+  border-radius: 24px;
+  border: 1px solid rgba(232, 218, 196, 0.14);
+  background: linear-gradient(180deg, rgba(24, 20, 16, 0.94), rgba(10, 8, 7, 0.96));
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  padding: 24px 28px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-sizing: border-box;
+}
+
+.guide-close-btn {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px;
+  opacity: 0.6;
+  transition: opacity var(--trans-soft);
+}
+
+.guide-close-btn:hover {
+  opacity: 1;
+  color: #fff;
+}
+
+.guide-title {
+  font-family: var(--font-script);
+  font-size: 1.8rem;
+  font-weight: 400;
+  color: #faf8f5;
+  margin: 0;
+  text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+}
+
+.guide-body {
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  margin: 0;
+  font-weight: 300;
+}
+
+.guide-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+  gap: 12px;
+}
+
+.guide-step-indicator {
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  letter-spacing: 1px;
+  opacity: 0.7;
+}
+
+.guide-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.guide-primary-btn {
+  background: rgba(201, 130, 69, 0.1);
+  border: 1px solid rgba(201, 130, 69, 0.3);
+  color: #faf8f5;
+  padding: 8px 18px;
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  font-weight: 500;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all var(--trans-soft);
+  text-transform: lowercase;
+}
+
+.guide-primary-btn:hover {
+  background: rgba(201, 130, 69, 0.2);
+  border-color: rgba(201, 130, 69, 0.6);
+  box-shadow: 0 0 12px rgba(201, 130, 69, 0.15);
+}
+
+.guide-secondary-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: color var(--trans-soft);
+  padding: 8px;
+  text-transform: lowercase;
+  font-weight: 400;
+}
+
+.guide-secondary-btn:hover {
+  color: #faf8f5;
+}
+
+.guide-highlight {
+  outline: 1px dashed rgba(201, 130, 69, 0.65) !important;
+  box-shadow: 0 0 28px rgba(201, 130, 69, 0.18) !important;
+  transition: outline 0.3s ease, box-shadow 0.3s ease;
+}
+
+@media (max-width: 600px) {
+  #first-night-guide-container {
+    inset: auto 16px 16px 16px;
+    transform: none;
+    width: auto;
+  }
+  .guide-card {
+    width: 100%;
+    border-radius: 16px;
+    padding: 20px 24px;
+  }
+  .guide-footer {
+    flex-wrap: wrap;
+  }
+  .guide-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
 
 
 
