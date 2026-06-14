@@ -5,6 +5,8 @@ import { $, $$, createSafeElement } from '../utils/dom';
 import { debounce } from '../utils/timing';
 import { ROOM_CONFIG } from '../constants/app';
 import { devLog } from '../utils/logger';
+import { getIcon } from '../ui/icons';
+import { applyAtmosphere } from '../themes/atmosphere';
 
 export class Environment {
   private bus: EventBus;
@@ -53,13 +55,22 @@ export class Environment {
     this.setupBusListeners();
     this.initCanvas();
     this.initStars();
+
+    // Landing background is configured as a static CSS background on #app-background
   }
 
   private setupBusListeners() {
       this.bus.on(APP_EVENTS.ROOM_CHANGED, (data: any) => {
           devLog('[ROOM_CHANGED_RECEIVED]', data);
-          if (data.isPrivate) this.enterPrivateCorner(data.room);
-          else this.changePublicRoom(data.room);
+          if (data.room === null) {
+              this.handleLeaveRoom();
+          } else {
+              if (data.isPrivate) {
+                  this.enterPrivateCorner(data.room);
+              } else {
+                  this.changePublicRoom(data.room);
+              }
+          }
       });
 
       this.bus.on(APP_EVENTS.USER_COUNT_UPDATED, (count: number) => {
@@ -116,8 +127,8 @@ export class Environment {
 
     this.particles.forEach(p => {
         p.y += p.speed;
-        if (p.type === 'snow' || p.type === 'motes' || p.type === 'aurora') {
-            p.x += Math.sin(now / 1000 + p.seed) * (p.type === 'aurora' ? 1.5 : 0.5);
+        if (p.type === 'snow' || p.type === 'motes') {
+            p.x += Math.sin(now / 1000 + p.seed) * 0.5;
         }
         
         if (p.y > this.canvas!.height + 100) p.y = -100;
@@ -137,11 +148,6 @@ export class Environment {
             this.ctx!.strokeStyle = grad; this.ctx!.lineWidth = 2;
             this.ctx!.beginPath(); this.ctx!.moveTo(p.x, p.y); this.ctx!.lineTo(p.x + p.length, p.y); this.ctx!.stroke();
             p.x -= p.speed * 2; 
-        } else if (p.type === 'aurora') {
-            this.ctx!.fillStyle = p.color;
-            this.ctx!.shadowBlur = 40; this.ctx!.shadowColor = p.color;
-            this.ctx!.beginPath(); this.ctx!.arc(p.x, p.y, p.size, 0, Math.PI * 2); this.ctx!.fill();
-            this.ctx!.shadowBlur = 0;
         } else {
             this.ctx!.fillStyle = p.color;
             this.ctx!.beginPath(); this.ctx!.arc(p.x, p.y, p.size || 1, 0, Math.PI * 2); this.ctx!.fill();
@@ -172,16 +178,7 @@ export class Environment {
   }
 
   initSilhouettes() {
-    const city = $('distant-city');
-    if(!city) return;
-    const frag = document.createDocumentFragment();
-    for(let i=0; i<12; i++) {
-      const win = createSafeElement('div', 'distant-window');
-      win.style.left = `${Math.random() * 100}%`; win.style.top = `${20 + Math.random() * 60}%`;
-      win.style.animationDelay = `-${Math.random() * 15}s`;
-      frag.appendChild(win);
-    }
-    city.appendChild(frag);
+    applyAtmosphere('default');
   }
 
   setupRoomListeners() {
@@ -191,7 +188,23 @@ export class Environment {
         Object.entries(this.themes).forEach(([key, theme]) => {
             const card = createSafeElement('div', 'dest-btn');
             card.dataset.room = key;
-            const name = createSafeElement('span', 'room-card-name', theme.name);
+            
+            const name = createSafeElement('span', 'room-card-name');
+            name.style.display = 'inline-flex';
+            name.style.alignItems = 'center';
+            name.style.gap = '8px';
+            
+            const iconMap: Record<string, string> = {
+                'window-seat': 'window',
+                'last-train': 'train',
+                'between-pages': 'library',
+                'northern-lights': 'aurora'
+            };
+            const iconName = iconMap[key] || 'room';
+            name.appendChild(getIcon(iconName, { class: 'hc-icon-md' }));
+            
+            const nameText = createSafeElement('span', '', theme.name);
+            name.appendChild(nameText);
             const desc = createSafeElement('span', 'room-card-desc', theme.desc);
             const meta = createSafeElement('span', 'room-card-meta', '0 souls resting');
             meta.id = `meta-${key}`;
@@ -254,8 +267,10 @@ export class Environment {
     
     this.elements.leaveBtn?.addEventListener('click', () => {
         this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'wood_creak');
-        devLog('[ROOM_JOIN_REQUEST_EMIT] leave private:', 'window-seat');
-        this.bus.emit(APP_EVENTS.ROOM_JOIN_REQUEST, 'window-seat');
+        const presence = (window as any).presence;
+        if (presence) {
+            presence.leaveRoom();
+        }
     });
   }
 
@@ -271,11 +286,74 @@ export class Environment {
 
   private _toggleUIVisibility(isPrivate: boolean) {
     document.body.classList.toggle('is-private-room', isPrivate);
-    if(this.elements.doorway) this.elements.doorway.style.display = isPrivate ? 'none' : 'block';
-    if(this.elements.table) this.elements.table.style.display = isPrivate ? 'block' : 'none';
-    if(this.elements.localMovie) this.elements.localMovie.style.display = isPrivate ? 'block' : 'none';
+    if(this.elements.table) this.elements.table.style.display = 'block';
     if(this.elements.inviteBtn) this.elements.inviteBtn.style.display = isPrivate ? 'inline-block' : 'none';
-    if(this.elements.leaveBtn) this.elements.leaveBtn.style.display = isPrivate ? 'inline-block' : 'none';
+    if(this.elements.leaveBtn) this.elements.leaveBtn.style.display = 'inline-block';
+  }
+
+  private transitionToRoomView() {
+    const roomEl = $('room-view');
+    const lobbyEl = $('lobby-view');
+    if (roomEl && lobbyEl && roomEl.classList.contains('view-hidden')) {
+        roomEl.classList.remove('view-hidden');
+        roomEl.classList.add('view-fading');
+        
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                lobbyEl.classList.add('view-fading');
+                roomEl.classList.remove('view-fading');
+            });
+        });
+
+        setTimeout(() => {
+            if (this.currentRoom !== null) {
+                lobbyEl.classList.add('view-hidden');
+            }
+        }, 500);
+    }
+  }
+
+  private transitionToLobbyView() {
+    const roomEl = $('room-view');
+    const lobbyEl = $('lobby-view');
+    if (roomEl && lobbyEl && lobbyEl.classList.contains('view-hidden')) {
+        lobbyEl.classList.remove('view-hidden');
+        lobbyEl.classList.add('view-fading');
+        
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                roomEl.classList.add('view-fading');
+                lobbyEl.classList.remove('view-fading');
+            });
+        });
+
+        setTimeout(() => {
+            if (this.currentRoom === null) {
+                roomEl.classList.add('view-hidden');
+            }
+        }, 500);
+    }
+  }
+
+  private handleLeaveRoom() {
+    this.currentRoom = null;
+    this.isPrivate = false;
+    document.body.classList.remove('is-private-room');
+    
+    if (typeof window !== 'undefined' && window.history) {
+        const url = new URL(window.location.href);
+        if (url.searchParams.has('corner')) {
+            url.searchParams.delete('corner');
+            window.history.pushState({}, '', url.toString());
+        }
+    }
+    
+    if (this.elements.roomTitle) this.elements.roomTitle.textContent = "Late Night Café";
+    applyAtmosphere('default');
+    this.renderWeather();
+    this.stationLoop(false);
+
+    this.transitionToLobbyView();
   }
 
   private changePublicRoom(roomKey: string) {
@@ -285,24 +363,24 @@ export class Environment {
     this._toggleUIVisibility(false);
     this.updateRoomCards();
     if(this.elements.roomTitle) this.elements.roomTitle.textContent = theme.name; 
-    if(this.elements.roomDesc) this.elements.roomDesc.textContent = theme.desc;
-    document.documentElement.style.setProperty('--sky-top', theme.top); 
-    document.documentElement.style.setProperty('--sky-bottom', theme.bot); 
-    document.documentElement.style.setProperty('--accent', theme.accent);
+    applyAtmosphere(roomKey);
     this.renderWeather(); 
     this.stationLoop(roomKey === 'last-train');
+    this.transitionToRoomView();
   }
 
   private enterPrivateCorner(cornerName: string) {
     this.currentRoom = cornerName; this.isPrivate = true;
     this._toggleUIVisibility(true);
     if(this.elements.roomTitle) this.elements.roomTitle.textContent = cornerName.replace(/-/g, ' ');
+    applyAtmosphere('default');
     if(this.elements.roomDesc) this.elements.roomDesc.textContent = "a hidden space, shared only with those you invite.";
     document.documentElement.style.setProperty('--sky-top', '#100508'); 
     document.documentElement.style.setProperty('--sky-bottom', '#1a080c'); 
     document.documentElement.style.setProperty('--accent', '#e53e3e');
     this.renderWeather(); 
     this.stationLoop(false);
+    this.transitionToRoomView();
   }
 
   renderWeather() {
@@ -317,13 +395,14 @@ export class Environment {
 
     for(let i=0; i<count; i++) {
         if (w === 'rain') {
-            this.particles.push({ type: 'rain', x: Math.random() * this.canvas.width, y: Math.random() * this.canvas.height, length: 40 + Math.random() * 40, speed: 15 + Math.random() * 10, opacity: 0.25, color: 'rgba(100,220,255,0.4)' });
+            this.particles.push({ type: 'rain', x: Math.random() * this.canvas.width, y: Math.random() * this.canvas.height, length: 40 + Math.random() * 40, speed: 3 + Math.random() * 2, opacity: 0.05, color: 'rgba(100,220,255,0.3)' });
         } else if (w === 'streaks') {
-            this.particles.push({ type: 'streaks', x: Math.random() * this.canvas.width, y: Math.random() * this.canvas.height, length: 150 + Math.random() * 300, speed: 30 + Math.random() * 20, opacity: 0.15, color: 'rgba(255,255,220,0.3)' });
+            this.particles.push({ type: 'streaks', x: Math.random() * this.canvas.width, y: Math.random() * this.canvas.height, length: 150 + Math.random() * 300, speed: 6 + Math.random() * 4, opacity: 0.03, color: 'rgba(255,255,220,0.2)' });
         } else if (w === 'motes') {
-            this.particles.push({ type: 'motes', x: Math.random() * this.canvas.width, y: Math.random() * this.canvas.height, size: 1.5 + Math.random() * 2, speed: 0.3 + Math.random() * 0.4, opacity: 0.4, seed: Math.random() * 10, color: 'rgba(255,220,180,0.5)' });
+            this.particles.push({ type: 'motes', x: Math.random() * this.canvas.width, y: Math.random() * this.canvas.height, size: 1.5 + Math.random() * 2, speed: 0.06 + Math.random() * 0.08, opacity: 0.08, seed: Math.random() * 10, color: 'rgba(255,220,180,0.3)' });
         } else if (w === 'aurora') {
-            this.particles.push({ type: 'aurora', x: Math.random() * this.canvas.width, y: Math.random() * (this.canvas.height * 0.6), size: 50 + Math.random() * 70, speed: 0.1 + Math.random() * 0.1, opacity: 0.08, seed: Math.random() * 20, color: i % 2 === 0 ? '#48bb78' : '#9f7aea' });
+            // Completely remove canvas bokeh circles, render only slow snow flakes
+            this.particles.push({ type: 'snow', x: Math.random() * this.canvas.width, y: Math.random() * this.canvas.height, size: 1.5 + Math.random() * 2, speed: 0.12 + Math.random() * 0.16, opacity: 0.04 + Math.random() * 0.06, seed: Math.random() * 10, color: '#ffffff' });
         }
     }
     this.lightningLoop(w === 'rain' && this.roomEmotionalWeight > 5);
@@ -335,9 +414,9 @@ export class Environment {
     const loop = () => {
       const flash = this.elements.lightning;
       if(flash && Math.random() > 0.8) {
-          flash.style.opacity = '0.2';
+          flash.style.opacity = '0.03';
           this.lifecycle.setTimeout(() => flash.style.opacity = '0', 150); 
-          this.lifecycle.setTimeout(() => { flash.style.opacity = '0.05'; this.lifecycle.setTimeout(()=>flash.style.opacity = '0', 100); }, 300);
+          this.lifecycle.setTimeout(() => { flash.style.opacity = '0.01'; this.lifecycle.setTimeout(()=>flash.style.opacity = '0', 100); }, 300);
       }
       this.lightningTimeout = this.lifecycle.setTimeout(loop, 10000 + Math.random() * 20000) as unknown as number;
     };

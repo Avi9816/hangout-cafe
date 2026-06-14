@@ -125,6 +125,7 @@ async function main() {
         await sleep(3000);
 
         console.log('Logging in Tab 1...');
+        await page1.waitForFunction(() => window.presence && window.presence.userId, { timeout: 15000 });
         await page1.type('#id-alias', 'Tab1Host');
         await page1.click('#btn-enter-cafe');
         await page1.waitForFunction(() => {
@@ -162,6 +163,7 @@ async function main() {
         await sleep(3000);
 
         console.log('Logging in Tab 2...');
+        await page2.waitForFunction(() => window.presence && window.presence.userId, { timeout: 15000 });
         await page2.type('#id-alias', 'Tab2Peer');
         await page2.click('#btn-enter-cafe');
         await page2.waitForFunction(() => {
@@ -273,6 +275,7 @@ async function main() {
         await sleep(3000);
 
         console.log('Logging in Tab 3...');
+        await page3.waitForFunction(() => window.presence && window.presence.userId, { timeout: 15000 });
         await page3.type('#id-alias', 'Tab3Rejoiner');
         await page3.click('#btn-enter-cafe');
         await page3.waitForFunction(() => {
@@ -283,7 +286,16 @@ async function main() {
         console.log('Tab 3 joining the empty room...');
         await page3.type('#private-room-input', testRoomName);
         await page3.click('#btn-create-private');
-        await sleep(4000); // Wait for restoration of snapshot and listeners
+        // Wait for restoration of snapshot, memories, tape state, and host takeover (up to 15s)
+        for (let attempt = 0; attempt < 30; attempt++) {
+            const mems = await page3.evaluate(() => window.presence.memories || []);
+            const vid = await page3.evaluate(() => window.presence.currentVideoState);
+            const uid = await page3.evaluate(() => window.presence.userId);
+            if (mems.length === 2 && vid && vid.url === 'magnet:?xt=urn:btih:tape_x_mock' && vid.hostId === uid) {
+                break;
+            }
+            await sleep(500);
+        }
 
         // Check 8 & 9 & 10 & 11: Rejoining room restores memories, tape state, queue, theme
         const tab3Memories = await page3.evaluate(() => window.presence.memories || []);

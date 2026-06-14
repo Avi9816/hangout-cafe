@@ -120,8 +120,17 @@ async function main() {
         console.log('Checking Check 1 (Initial stats)...');
         const initialStats = await page1.evaluate(async (room) => {
             const fs = window._firestore;
-            const snap = await fs.getDoc(fs.doc(window.presence.db, 'artifacts', window.presence.appId, 'public', 'data', 'rooms', room));
-            const data = snap.data();
+            const docRef = fs.doc(window.presence.db, 'artifacts', window.presence.appId, 'public', 'data', 'rooms', room);
+            for (let i = 0; i < 10; i++) {
+                const snap = await fs.getDoc(docRef);
+                const data = snap.data();
+                if (data && data.visitorCount !== undefined && data.visitCount !== undefined) {
+                    return { visitorCount: data.visitorCount, visitCount: data.visitCount };
+                }
+                await new Promise(r => setTimeout(r, 1000));
+            }
+            const snap = await fs.getDoc(docRef);
+            const data = snap.data() || {};
             return { visitorCount: data.visitorCount, visitCount: data.visitCount };
         }, testRoomName);
         console.log('Initial Room Stats:', initialStats);

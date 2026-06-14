@@ -340,7 +340,12 @@ export class SharedPresence {
 
   applyIdentity() {
      if (!this.profile) return;
-     const idEl = $('my-identity'); if (idEl) idEl.textContent = `${this.profile.alias} — ${this.profile.mood}`;
+     const idEl = $('my-identity');
+     if (idEl) {
+        const alias = (this.profile.alias && this.profile.alias !== 'undefined') ? this.profile.alias : 'wanderer';
+        const mood = (this.profile.mood && this.profile.mood.trim() !== '' && this.profile.mood !== 'undefined') ? this.profile.mood.trim() : 'resting quietly';
+        idEl.textContent = `${alias} — ${mood}`;
+     }
      $('identity-status')?.classList.add('visible');
      const params = new URLSearchParams(window.location.search);
      const corner = params.get('corner');
@@ -383,6 +388,7 @@ export class SharedPresence {
     this.queue = [];
     this.roomCode = null;
     this.currentVideoState = null;
+    this.bus.emit(APP_EVENTS.ROOM_CHANGED, { room: null, isPrivate: false, theme: null });
   }
 
   joinRoom(roomKey: string, theme: string | null = null) {
@@ -699,9 +705,11 @@ export class SharedPresence {
         subcolSnap.docs.forEach(doc => {
             const p = doc.data();
             if (now - p.time < 60000) {
+                const aliasVal = (p.alias && p.alias !== 'undefined') ? p.alias : 'wanderer';
+                const moodVal = (p.mood && p.mood !== 'undefined') ? p.mood : 'resting quietly';
                 this.activeUsers[p.uid || doc.id] = {
-                    alias: p.alias || 'wanderer',
-                    mood: p.mood || 'resting quietly',
+                    alias: aliasVal,
+                    mood: moodVal,
                     time: p.time,
                     joinedAt: p.joinedAt || p.time
                 };
@@ -711,20 +719,22 @@ export class SharedPresence {
         this.bus.emit(APP_EVENTS.USER_COUNT_UPDATED, currentCount);
         this.renderPresenceUI();
 
-        // Host Continuity Check
-        this.checkHostContinuity();
+        // Host Continuity Check - if takeover is initiated, it will batch activeCount/lastActiveAt updates inside the transaction
+        const takeoverInitiated = this.checkHostContinuity(currentCount);
 
-        // Sync activeCount and lastActiveAt on root document if we are the oldest active user
-        const activeEntries = Object.entries(this.activeUsers);
-        if (activeEntries.length > 0) {
-            activeEntries.sort((a, b) => (a[1].joinedAt || 0) - (b[1].joinedAt || 0));
-            const oldestUid = activeEntries[0][0];
-            if (oldestUid === this.userId) {
-                const roomRef = doc(db!, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode!);
-                updateDoc(roomRef, {
-                    activeCount: currentCount,
-                    lastActiveAt: Date.now()
-                }).catch(err => devLog('Oldest user failed to sync activeCount:', err));
+        // Sync activeCount and lastActiveAt on root document if we are the oldest active user AND no takeover was initiated
+        if (!takeoverInitiated) {
+            const activeEntries = Object.entries(this.activeUsers);
+            if (activeEntries.length > 0) {
+                activeEntries.sort((a, b) => (a[1].joinedAt || 0) - (b[1].joinedAt || 0));
+                const oldestUid = activeEntries[0][0];
+                if (oldestUid === this.userId) {
+                    const roomRef = doc(db!, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode!);
+                    updateDoc(roomRef, {
+                        activeCount: currentCount,
+                        lastActiveAt: Date.now()
+                    }).catch(err => devLog('Oldest user failed to sync activeCount:', err));
+                }
             }
         }
       } else {
@@ -854,7 +864,8 @@ export class SharedPresence {
             userPill.appendChild(dot);
             
             const nameSpan = document.createElement('span');
-            nameSpan.textContent = u.alias;
+            const aliasVal = (u.alias && String(u.alias).trim() !== '' && String(u.alias).trim() !== 'undefined') ? String(u.alias).trim() : 'wanderer';
+            nameSpan.textContent = aliasVal;
             nameSpan.style.fontWeight = '500';
             userPill.appendChild(nameSpan);
 
@@ -873,15 +884,14 @@ export class SharedPresence {
                 userPill.appendChild(badge);
             }
 
-            if (u.mood) {
-                const moodSpan = document.createElement('span');
-                moodSpan.style.opacity = '0.5';
-                moodSpan.style.fontSize = '0.7rem';
-                moodSpan.style.marginLeft = '6px';
-                moodSpan.style.fontStyle = 'italic';
-                moodSpan.textContent = `(${u.mood})`;
-                userPill.appendChild(moodSpan);
-            }
+            const rawMood = u.mood && String(u.mood).trim() !== '' && String(u.mood).trim() !== 'undefined' ? String(u.mood).trim() : 'resting quietly';
+            const moodSpan = document.createElement('span');
+            moodSpan.style.opacity = '0.5';
+            moodSpan.style.fontSize = '0.7rem';
+            moodSpan.style.marginLeft = '6px';
+            moodSpan.style.fontStyle = 'italic';
+            moodSpan.textContent = `(${rawMood})`;
+            userPill.appendChild(moodSpan);
 
             frag.appendChild(userPill);
         });
@@ -1011,8 +1021,8 @@ export class SharedPresence {
       }
   }
 
-  checkHostContinuity() {
-      if (!this.userId || !db || !this.roomCode) return;
+  checkHostContinuity(currentCount?: number): boolean {
+      if (!this.userId || !db || !this.roomCode) return false;
       if (this.currentVideoState && this.currentVideoState.hostId) {
           const currentHostId = this.currentVideoState.hostId;
           if (!this.activeUsers[currentHostId]) {
@@ -1038,13 +1048,18 @@ export class SharedPresence {
                               const currentVideo = roomDoc.data().video;
                               if (currentVideo && currentVideo.hostId === currentHostId) {
                                   devLog('[HOST_CONTINUITY] Takeover conditions met. Claiming host authority...');
-                                  transaction.update(roomRef, {
+                                  const updatePayload: any = {
                                       'video.hostId': this.userId,
                                       'video.host': this.profile?.alias || 'wanderer',
                                       'video.sender': this.userId,
                                       currentHost: this.profile?.alias || 'wanderer',
                                       updatedAt: Date.now()
-                                  });
+                                  };
+                                  if (typeof currentCount === 'number') {
+                                      updatePayload.activeCount = currentCount;
+                                      updatePayload.lastActiveAt = Date.now();
+                                  }
+                                  transaction.update(roomRef, updatePayload);
                               } else {
                                   devLog('[HOST_CONTINUITY] Takeover aborted: hostId already changed.');
                               }
@@ -1055,10 +1070,12 @@ export class SharedPresence {
                       }).catch(err => {
                           console.error('[HOST_CONTINUITY] Takeover transaction failed:', err);
                       });
+                      return true;
                   }
               }
           }
       }
+      return false;
   }
 
   async addHistoryEvent(type: 'tape_played' | 'note_pinned' | 'object_placed' | 'host_changed' | 'room_created' | 'photo_added', text: string) {

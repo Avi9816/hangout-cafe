@@ -1,19 +1,38 @@
 :root {
-  --sky-top: #0a0b12;
-  --sky-bottom: #1a1c2c;
-  --fog-color: rgba(10, 11, 18, 0.95);
-  
-  --text-main: #f7fafc;
-  --text-muted: #a0aec0;
-  --text-glow: rgba(255, 255, 255, 0.15);
-  --accent: #63b3ed;
-  
+  /* ===== App Background ===== */
+  --app-bg: #090807;
+  --app-bg-deep: #050505;
+  --sky-top: #090807;
+  --sky-bottom: #0d0b09;
+
+  /* ===== Surface Tokens ===== */
+  --surface: rgba(18,16,14,0.86);
+  --surface-strong: rgba(24,21,18,0.92);
+  --border-soft: rgba(232,218,196,0.10);
+
+  /* ===== Fog & Glow ===== */
+  --fog-color: linear-gradient(to top, rgba(150,84,42,0.04) 0%, transparent 100%);
+  --theme-glow: rgba(201,130,69,0.14);
+
+  /* ===== Text ===== */
+  --text-primary: #E8DED0;
+  --text-main: #E8DED0;
+  --text-secondary: #B2A89A;
+  --text-muted: #746B61;
+  --text-glow: rgba(232,222,208,0.12);
+
+  /* ===== Accent ===== */
+  --accent: #C98245;
+
+  /* ===== Typography ===== */
   --font-ui: 'Nunito', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-script: 'Caveat', cursive;
-  
+
+  /* ===== Transitions ===== */
   --trans-cinematic: 2s cubic-bezier(0.4, 0, 0.2, 1);
   --trans-soft: 0.8s cubic-bezier(0.4, 0, 0.2, 1);
-  
+
+  /* ===== Camera / Parallax ===== */
   --cam-x: 0px;
   --cam-y: 0px;
   --focus-bg: 0px;
@@ -23,12 +42,36 @@
 
 * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html { width: 100%; overflow-x: hidden; scroll-behavior: smooth; }
+
 body {
-  width: 100%; min-height: 100vh; background-color: #000; color: var(--text-main);
-  font-family: var(--font-ui); overflow-x: hidden; overflow-y: auto;
-  -webkit-overflow-scrolling: touch; transition: background-color var(--trans-cinematic), filter 8s ease;
+  width: 100%;
+  min-height: 100dvh;
+  color: var(--text-main);
+  font-family: var(--font-ui);
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  transition: filter 8s ease;
+
+  /* Phase 2: Real but subtle noir café background */
+  background:
+    radial-gradient(circle at 50% 115%, rgba(150, 84, 42, 0.16), transparent 45%),
+    radial-gradient(circle at 15% 8%, rgba(65, 74, 82, 0.10), transparent 36%),
+    radial-gradient(circle at 85% 20%, rgba(80, 55, 38, 0.08), transparent 34%),
+    linear-gradient(180deg, #090807 0%, #0d0b09 46%, #070706 100%);
+  background-attachment: fixed;
+}
+
+/* Fixed vignette */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(circle at center, transparent 40%, rgba(0,0,0,0.55) 100%);
+  pointer-events: none;
+  z-index: 1;
 }
 
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+::-webkit-scrollbar-thumb { background: rgba(232,218,196,0.12); border-radius: 10px; }

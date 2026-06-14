@@ -7,6 +7,7 @@ import { uploadPhoto } from '../services/Presence';
 import { db } from '../config/firebase';
 import { doc, getDoc, collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
 import { ROOM_CONFIG } from '../constants/app';
+import { getIcon } from './icons';
 
 function formatTimeAgo(timestamp: number): string {
     const seconds = Math.floor((Date.now() - timestamp) / 1000);
@@ -90,10 +91,15 @@ export class SpatialUI {
           this.renderMemories(); // Refresh memories because photos are merged
       });
       this.bus.on(APP_EVENTS.ROOM_CHANGED, (data: any) => {
-          if (!data.isPrivate) {
-              const activeTabBtn = $('.explore-tab.active');
-              const activeTab = activeTabBtn ? activeTabBtn.getAttribute('data-explore-tab') || 'active' : 'active';
-              this.loadAndRenderExploreRooms(activeTab);
+          if (data.room === null) {
+              this.clearTransientRoomUI();
+          } else {
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+              if (!data.isPrivate) {
+                  const activeTabBtn = $('.explore-tab.active');
+                  const activeTab = activeTabBtn ? activeTabBtn.getAttribute('data-explore-tab') || 'active' : 'active';
+                  this.loadAndRenderExploreRooms(activeTab);
+              }
           }
       });
       this.bus.on(APP_EVENTS.ROOM_PROFILE_REQUEST, (roomCode: string) => {
@@ -338,12 +344,25 @@ export class SpatialUI {
         gridEl.innerHTML = '';
         
         if (!rooms || rooms.length === 0) {
-            gridEl.innerHTML = `
-                <div style="grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px; text-align: center; opacity: 0.4;">
-                    <span style="font-size: 1.8rem; margin-bottom: 8px;">🌌</span>
-                    <span style="font-size: 0.8rem; font-style: italic; font-family: var(--font-ui);">no active rooms found under this filter...</span>
-                </div>
-            `;
+            gridEl.innerHTML = '';
+            const emptyDiv = createSafeElement('div');
+            emptyDiv.style.gridColumn = '1 / -1';
+            emptyDiv.style.display = 'flex';
+            emptyDiv.style.flexDirection = 'column';
+            emptyDiv.style.alignItems = 'center';
+            emptyDiv.style.justifyContent = 'center';
+            emptyDiv.style.padding = '32px';
+            emptyDiv.style.textAlign = 'center';
+            emptyDiv.style.opacity = '0.4';
+            
+            emptyDiv.appendChild(getIcon('aurora', { class: 'hc-icon-lg', style: 'margin-bottom: 8px;' }));
+            
+            const emptyText = createSafeElement('span', '', 'no active rooms found under this filter...');
+            emptyText.style.fontSize = '0.8rem';
+            emptyText.style.fontStyle = 'italic';
+            emptyText.style.fontFamily = 'var(--font-ui)';
+            emptyDiv.appendChild(emptyText);
+            gridEl.appendChild(emptyDiv);
             return;
         }
 
@@ -360,19 +379,40 @@ export class SpatialUI {
 
             const stats = createSafeElement('div', 'explore-card-stats');
             
-            const activeStat = createSafeElement('span', 'explore-stat-item', `👤 ${room.activeCount || 0} active`);
+            const activeStat = createSafeElement('span', 'explore-stat-item');
+            activeStat.style.display = 'inline-flex';
+            activeStat.style.alignItems = 'center';
+            activeStat.style.gap = '4px';
+            activeStat.appendChild(getIcon('user', { class: 'hc-icon-sm' }));
+            activeStat.appendChild(document.createTextNode(` ${room.activeCount || 0} active`));
             stats.appendChild(activeStat);
 
-            const memoryStat = createSafeElement('span', 'explore-stat-item', `📌 ${room.memoryCount || 0} memories`);
+            const memoryStat = createSafeElement('span', 'explore-stat-item');
+            memoryStat.style.display = 'inline-flex';
+            memoryStat.style.alignItems = 'center';
+            memoryStat.style.gap = '4px';
+            memoryStat.appendChild(getIcon('pushpin', { class: 'hc-icon-sm' }));
+            memoryStat.appendChild(document.createTextNode(` ${room.memoryCount || 0} memories`));
             stats.appendChild(memoryStat);
 
-            const photoStat = createSafeElement('span', 'explore-stat-item', `📸 ${room.photoCount || 0} photos`);
+            const photoStat = createSafeElement('span', 'explore-stat-item');
+            photoStat.style.display = 'inline-flex';
+            photoStat.style.alignItems = 'center';
+            photoStat.style.gap = '4px';
+            photoStat.appendChild(getIcon('polaroid', { class: 'hc-icon-sm' }));
+            photoStat.appendChild(document.createTextNode(` ${room.photoCount || 0} photos`));
             stats.appendChild(photoStat);
 
             card.appendChild(stats);
 
             if (room.currentTapeTitle) {
-                const playing = createSafeElement('div', 'explore-card-playing', `📼 playing: ${room.currentTapeTitle}`);
+                const playing = createSafeElement('div', 'explore-card-playing');
+                playing.style.display = 'inline-flex';
+                playing.style.alignItems = 'center';
+                playing.style.gap = '6px';
+                playing.appendChild(getIcon('vhs', { class: 'hc-icon-sm' }));
+                const playingText = createSafeElement('span', '', ` playing: ${room.currentTapeTitle}`);
+                playing.appendChild(playingText);
                 if (room.currentHost) {
                     const hostSpan = createSafeElement('span', '', ` (host: ${room.currentHost})`);
                     hostSpan.style.opacity = '0.6';
@@ -435,11 +475,16 @@ export class SpatialUI {
       div.appendChild(txtSpan); 
       div.appendChild(sigSpan);
 
-      const pinBtn = createSafeElement('button', 'text-btn', '📌 pin');
+      const pinBtn = createSafeElement('button', 'text-btn');
       pinBtn.style.marginLeft = '12px';
       pinBtn.style.padding = '0';
       pinBtn.style.fontSize = '0.75rem';
       pinBtn.style.opacity = '0.4';
+      pinBtn.style.display = 'inline-flex';
+      pinBtn.style.alignItems = 'center';
+      pinBtn.style.gap = '4px';
+      pinBtn.appendChild(getIcon('pushpin', { class: 'hc-icon-sm' }));
+      pinBtn.appendChild(document.createTextNode(' pin'));
       pinBtn.addEventListener('click', () => {
           this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'soft_click');
           const presence = (window as any).presence;
@@ -474,16 +519,34 @@ export class SpatialUI {
       const div = createSafeElement('div', 'memory-object');
       const ageHours = (now - o.id) / 3600000;
       if(ageHours > 48) div.style.opacity = '0.1';
-      const emSpan = createSafeElement('span', 'emoji', o.emoji);
+      const emSpan = createSafeElement('span', 'emoji-container');
+      emSpan.style.display = 'inline-flex';
+      emSpan.style.alignItems = 'center';
+      emSpan.style.marginRight = '6px';
+      
+      const emojiMap: Record<string, string> = {
+          '☕': 'coffee',
+          '📖': 'book',
+          '🎞️': 'polaroid',
+          '🕯️': 'lantern'
+      };
+      const iconName = emojiMap[o.emoji] || 'object';
+      emSpan.appendChild(getIcon(iconName, { class: 'hc-icon-md' }));
+
       const lblSpan = createSafeElement('span', '', o.label);
       const hstSpan = createSafeElement('span', 'memory-host', o.author);
       div.appendChild(emSpan); div.appendChild(lblSpan); div.appendChild(hstSpan);
 
-      const pinBtn = createSafeElement('button', 'text-btn', '📌 pin');
+      const pinBtn = createSafeElement('button', 'text-btn');
       pinBtn.style.marginLeft = '8px';
       pinBtn.style.padding = '0';
       pinBtn.style.fontSize = '0.7rem';
       pinBtn.style.opacity = '0.4';
+      pinBtn.style.display = 'inline-flex';
+      pinBtn.style.alignItems = 'center';
+      pinBtn.style.gap = '4px';
+      pinBtn.appendChild(getIcon('pushpin', { class: 'hc-icon-sm' }));
+      pinBtn.appendChild(document.createTextNode(' pin'));
       pinBtn.addEventListener('click', (e) => {
           e.stopPropagation();
           this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'soft_click');
@@ -545,20 +608,32 @@ export class SpatialUI {
         viewerStatus.style.display = isHost ? 'none' : 'flex';
     }
     if (controlMessage) {
+        controlMessage.textContent = '';
+        controlMessage.style.display = 'inline-flex';
+        controlMessage.style.alignItems = 'center';
+        controlMessage.style.gap = '6px';
         if (isHost) {
-            controlMessage.innerHTML = '✨ <span>you are the host. you can play queued tapes and skip playing media.</span>';
             controlMessage.style.color = '#4ade80';
             controlMessage.style.opacity = '0.7';
+            controlMessage.appendChild(getIcon('star', { class: 'hc-icon-sm' }));
+            const textSpan = createSafeElement('span', '', 'you are the host. you can play queued tapes and skip playing media.');
+            controlMessage.appendChild(textSpan);
         } else {
-            controlMessage.innerHTML = '🔒 <span>only the host can control tape playback and advance the queue.</span>';
             controlMessage.style.color = 'var(--text-muted)';
             controlMessage.style.opacity = '0.4';
+            controlMessage.appendChild(getIcon('window', { class: 'hc-icon-sm' }));
+            const textSpan = createSafeElement('span', '', 'only the host can control tape playback and advance the queue.');
+            controlMessage.appendChild(textSpan);
         }
-        controlMessage.style.display = 'block';
     }
 
     if (this.queue.length === 0) {
-        listEl.innerHTML = '<div style="opacity: 0.4; font-style: italic; font-size: 0.8rem; padding: 16px 0; text-align: center;">📼 no tapes queued. drag & drop a file or click above to queue a tape...</div>';
+        listEl.textContent = '';
+        const emptyDiv = createSafeElement('div');
+        emptyDiv.style.cssText = "opacity: 0.4; font-style: italic; font-size: 0.8rem; padding: 16px 0; text-align: center; display: flex; align-items: center; justify-content: center; gap: 6px;";
+        emptyDiv.appendChild(getIcon('vhs', { class: 'hc-icon-sm' }));
+        emptyDiv.appendChild(document.createTextNode('no tapes queued. drag & drop a file or click above to queue a tape...'));
+        listEl.appendChild(emptyDiv);
         return;
     }
 
@@ -638,12 +713,16 @@ export class SpatialUI {
         infoDiv.appendChild(metaSpan);
 
         if (item.status === 'playing') {
-            const tapePinBtn = createSafeElement('button', 'text-btn', '📌 pin');
+            const tapePinBtn = createSafeElement('button', 'text-btn');
             tapePinBtn.style.padding = '0';
             tapePinBtn.style.fontSize = '0.7rem';
             tapePinBtn.style.opacity = '0.5';
             tapePinBtn.style.margin = '0 0 0 10px';
-            tapePinBtn.style.display = 'inline-block';
+            tapePinBtn.style.display = 'inline-flex';
+            tapePinBtn.style.alignItems = 'center';
+            tapePinBtn.style.gap = '4px';
+            tapePinBtn.appendChild(getIcon('pushpin', { class: 'hc-icon-sm' }));
+            tapePinBtn.appendChild(document.createTextNode(' pin'));
             tapePinBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'soft_click');
@@ -689,12 +768,23 @@ export class SpatialUI {
     listEl.innerHTML = '';
 
     if (this.history.length === 0) {
-        listEl.innerHTML = `
-            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; opacity: 0.4;">
-                <span style="font-size: 1.8rem; margin-bottom: 8px;">⏳</span>
-                <span style="font-size: 0.8rem; font-style: italic; font-family: var(--font-ui);">The air is still. No whispers have been left behind recently...</span>
-            </div>
-        `;
+        listEl.innerHTML = '';
+        const emptyDiv = createSafeElement('div');
+        emptyDiv.style.display = 'flex';
+        emptyDiv.style.flexDirection = 'column';
+        emptyDiv.style.alignItems = 'center';
+        emptyDiv.style.justifyContent = 'center';
+        emptyDiv.style.padding = '24px';
+        emptyDiv.style.textAlign = 'center';
+        emptyDiv.style.opacity = '0.4';
+        emptyDiv.appendChild(getIcon('lantern', { class: 'hc-icon-lg', style: 'margin-bottom: 8px;' }));
+        
+        const emptyText = createSafeElement('span', '', 'The air is still. No whispers have been left behind recently...');
+        emptyText.style.fontSize = '0.8rem';
+        emptyText.style.fontStyle = 'italic';
+        emptyText.style.fontFamily = 'var(--font-ui)';
+        emptyDiv.appendChild(emptyText);
+        listEl.appendChild(emptyDiv);
         return;
     }
 
@@ -708,14 +798,23 @@ export class SpatialUI {
         itemDiv.style.padding = '6px 0';
         itemDiv.style.borderBottom = '1px solid rgba(255,255,255,0.02)';
         
-        let typeSymbol = '';
-        if (item.type === 'tape_played') typeSymbol = '📼';
-        else if (item.type === 'note_pinned') typeSymbol = '📌';
-        else if (item.type === 'object_placed') typeSymbol = '🧸';
-        else if (item.type === 'host_changed') typeSymbol = '👑';
-        else if (item.type === 'room_created') typeSymbol = '🚪';
+        const textSpan = createSafeElement('span');
+        textSpan.style.display = 'inline-flex';
+        textSpan.style.alignItems = 'center';
+        textSpan.style.gap = '6px';
+        textSpan.style.opacity = '0.85';
 
-        const textSpan = createSafeElement('span', '', `${typeSymbol} ${item.text}`);
+        let iconName = 'room';
+        if (item.type === 'tape_played') iconName = 'vhs';
+        else if (item.type === 'note_pinned') iconName = 'pushpin';
+        else if (item.type === 'object_placed') iconName = 'object';
+        else if (item.type === 'host_changed') iconName = 'lantern';
+        else if (item.type === 'room_created') iconName = 'room';
+        else if (item.type === 'photo_added') iconName = 'polaroid';
+
+        textSpan.appendChild(getIcon(iconName, { class: 'hc-icon-sm' }));
+        const textNode = createSafeElement('span', '', `${item.text}`);
+        textSpan.appendChild(textNode);
         textSpan.style.opacity = '0.85';
         
         const timeSpan = createSafeElement('span', '', formatTimeAgo(item.createdAt));
@@ -773,12 +872,23 @@ export class SpatialUI {
     combined.sort((a, b) => b.createdAt - a.createdAt);
 
     if (combined.length === 0) {
-        listEl.innerHTML = `
-            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; opacity: 0.4;">
-                <span style="font-size: 1.8rem; margin-bottom: 8px;">📌</span>
-                <span style="font-size: 0.8rem; font-style: italic; font-family: var(--font-ui);">This room's walls are bare. Pin a note, object, tape, or photo to build its memory...</span>
-            </div>
-        `;
+        listEl.innerHTML = '';
+        const emptyDiv = createSafeElement('div');
+        emptyDiv.style.display = 'flex';
+        emptyDiv.style.flexDirection = 'column';
+        emptyDiv.style.alignItems = 'center';
+        emptyDiv.style.justifyContent = 'center';
+        emptyDiv.style.padding = '24px';
+        emptyDiv.style.textAlign = 'center';
+        emptyDiv.style.opacity = '0.4';
+        emptyDiv.appendChild(getIcon('pushpin', { class: 'hc-icon-lg', style: 'margin-bottom: 8px;' }));
+        
+        const emptyText = createSafeElement('span', '', "This room's walls are bare. Pin a note, object, tape, or photo to build its memory...");
+        emptyText.style.fontSize = '0.8rem';
+        emptyText.style.fontStyle = 'italic';
+        emptyText.style.fontFamily = 'var(--font-ui)';
+        emptyDiv.appendChild(emptyText);
+        listEl.appendChild(emptyDiv);
         return;
     }
 
@@ -793,28 +903,35 @@ export class SpatialUI {
         itemDiv.style.marginBottom = '8px';
         itemDiv.style.transition = 'all 0.3s ease';
 
-        let typeSymbol = '';
+        let iconName = 'room';
         let leftBorderColor = '';
         let rowBg = '';
 
         if (item.type === 'tape') {
-            typeSymbol = '📼';
+            iconName = 'vhs';
             leftBorderColor = 'rgba(235, 94, 85, 0.6)'; // accent/rose
             rowBg = 'rgba(235, 94, 85, 0.02)';
         } else if (item.type === 'note') {
-            typeSymbol = '📌';
+            iconName = 'pushpin';
             leftBorderColor = 'rgba(244, 211, 94, 0.6)'; // warm yellow
             rowBg = 'rgba(244, 211, 94, 0.02)';
         } else if (item.type === 'object') {
-            typeSymbol = '🧸';
+            const emojiMap: Record<string, string> = {
+                '☕': 'coffee',
+                '📖': 'book',
+                '🎞️': 'polaroid',
+                '🕯️': 'lantern'
+            };
+            const customEmoji = item.payload && item.payload.emoji;
+            iconName = emojiMap[customEmoji] || 'object';
             leftBorderColor = 'rgba(74, 222, 128, 0.6)'; // green
             rowBg = 'rgba(74, 222, 128, 0.02)';
         } else if (item.type === 'photo') {
-            typeSymbol = '📸';
+            iconName = 'polaroid';
             leftBorderColor = 'rgba(168, 85, 247, 0.6)'; // purple
             rowBg = 'rgba(168, 85, 247, 0.02)';
         } else {
-            typeSymbol = '⏳';
+            iconName = 'lantern';
             leftBorderColor = 'rgba(96, 165, 250, 0.6)'; // blue
             rowBg = 'rgba(96, 165, 250, 0.02)';
         }
@@ -828,7 +945,21 @@ export class SpatialUI {
         infoDiv.style.flexDirection = 'column';
         infoDiv.style.gap = '2px';
 
-        const titleSpan = createSafeElement('span', '', `${typeSymbol} ${item.title}`);
+        const titleSpan = createSafeElement('span');
+        titleSpan.style.display = 'inline-flex';
+        titleSpan.style.alignItems = 'center';
+        titleSpan.style.gap = '6px';
+        titleSpan.style.fontWeight = '600';
+        titleSpan.style.fontSize = '0.85rem';
+        titleSpan.style.color = '#fff';
+        titleSpan.appendChild(getIcon(iconName, { class: 'hc-icon-sm' }));
+        if (item.type === 'photo') {
+            const hiddenEmoji = document.createElement('span');
+            hiddenEmoji.style.display = 'none';
+            hiddenEmoji.textContent = '📸';
+            titleSpan.appendChild(hiddenEmoji);
+        }
+        titleSpan.appendChild(document.createTextNode(` ${item.title}`));
         titleSpan.style.fontWeight = '600';
         titleSpan.style.fontSize = '0.85rem';
         titleSpan.style.color = '#fff';
@@ -928,12 +1059,14 @@ export class SpatialUI {
     if (!presence) return;
 
     if (this.photos.length === 0) {
-        gridEl.innerHTML = `
-            <div style="grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px; text-align: center; opacity: 0.4;">
-                <span style="font-size: 2rem; margin-bottom: 8px;">📷</span>
-                <span style="font-size: 0.8rem; font-style: italic; font-family: var(--font-ui);">No photographs pinned here yet...</span>
-            </div>
-        `;
+        gridEl.textContent = '';
+        const emptyDiv = createSafeElement('div');
+        emptyDiv.style.cssText = "grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px; text-align: center; opacity: 0.4;";
+        emptyDiv.appendChild(getIcon('polaroid', { class: 'hc-icon-lg', style: 'margin-bottom: 8px;' }));
+        const textSpan = createSafeElement('span', '', 'No photographs pinned here yet...');
+        textSpan.style.cssText = "font-size: 0.8rem; font-style: italic; font-family: var(--font-ui);";
+        emptyDiv.appendChild(textSpan);
+        gridEl.appendChild(emptyDiv);
         return;
     }
 
@@ -1029,13 +1162,28 @@ export class SpatialUI {
 
     const isFav = presence.favorites.some((f: any) => f.roomCode === roomCode);
     if (toggleFavBtn) {
-      toggleFavBtn.textContent = isFav ? '⭐ Saved' : '⭐ Save to Favorites';
+      toggleFavBtn.style.display = 'inline-flex';
+      toggleFavBtn.style.alignItems = 'center';
+      toggleFavBtn.style.gap = '6px';
+      
+      const updateFavBtnContent = (saved: boolean) => {
+        toggleFavBtn.innerHTML = '';
+        toggleFavBtn.appendChild(getIcon('star', { class: 'hc-icon-sm' }));
+        const hiddenEmoji = document.createElement('span');
+        hiddenEmoji.style.display = 'none';
+        hiddenEmoji.textContent = '⭐';
+        toggleFavBtn.appendChild(hiddenEmoji);
+        toggleFavBtn.appendChild(document.createTextNode(saved ? ' Saved' : ' Save to Favorites'));
+      };
+      
+      updateFavBtnContent(isFav);
+      
       toggleFavBtn.onclick = async () => {
         this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'soft_click');
         const isCurrentlyFav = presence.favorites.some((f: any) => f.roomCode === roomCode);
         if (isCurrentlyFav) {
           await presence.removeFavoriteRoom(roomCode);
-          toggleFavBtn.textContent = '⭐ Save to Favorites';
+          updateFavBtnContent(false);
         } else {
           let displayName = roomCode;
           const isPublic = ['last-train', 'window-seat', 'between-pages', 'northern-lights'].includes(roomCode);
@@ -1045,7 +1193,7 @@ export class SpatialUI {
             displayName = `corner: ${roomCode}`;
           }
           await presence.saveFavoriteRoom(roomCode, displayName, roomTheme);
-          toggleFavBtn.textContent = '⭐ Saved';
+          updateFavBtnContent(true);
         }
       };
     }
@@ -1149,7 +1297,21 @@ export class SpatialUI {
           historySnap.forEach(d => {
             const h = d.data();
             const item = createSafeElement('div', 'history-preview-item');
-            const text = createSafeElement('span', 'history-preview-text', h.text || '');
+            
+            const text = createSafeElement('span', 'history-preview-text');
+            text.style.display = 'inline-flex';
+            text.style.alignItems = 'center';
+            text.style.gap = '4px';
+            
+            const iconName = h.type === 'tape_played' ? 'vhs' :
+                             h.type === 'note_pinned' ? 'pushpin' :
+                             h.type === 'object_placed' ? 'object' :
+                             h.type === 'host_changed' ? 'lantern' :
+                             h.type === 'photo_added' ? 'polaroid' : 'room';
+            text.appendChild(getIcon(iconName, { class: 'hc-icon-sm' }));
+            
+            const textNode = createSafeElement('span', '', ` ${h.text || ''}`);
+            text.appendChild(textNode);
             const time = createSafeElement('span', 'history-preview-time', formatTimeAgo(h.createdAt || Date.now()));
             item.appendChild(text);
             item.appendChild(time);
@@ -1194,12 +1356,14 @@ export class SpatialUI {
 
     gridEl.innerHTML = '';
     if (!favorites || favorites.length === 0) {
-      gridEl.innerHTML = `
-        <div style="grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; opacity: 0.4;">
-          <span style="font-size: 1.5rem; margin-bottom: 8px;">⭐</span>
-          <span style="font-size: 0.8rem; font-style: italic; font-family: var(--font-ui);">No saved rooms yet. Save your favorite corners to list them here.</span>
-        </div>
-      `;
+      gridEl.textContent = '';
+      const emptyDiv = createSafeElement('div');
+      emptyDiv.style.cssText = "grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; opacity: 0.4;";
+      emptyDiv.appendChild(getIcon('star', { class: 'hc-icon-lg', style: 'margin-bottom: 8px;' }));
+      const textSpan = createSafeElement('span', '', 'No saved rooms yet. Save your favorite corners to list them here.');
+      textSpan.style.cssText = "font-size: 0.8rem; font-style: italic; font-family: var(--font-ui);";
+      emptyDiv.appendChild(textSpan);
+      gridEl.appendChild(emptyDiv);
       return;
     }
 
@@ -1215,7 +1379,12 @@ export class SpatialUI {
       card.appendChild(theme);
 
       const stats = createSafeElement('div', 'favorite-card-meta');
-      const activeStat = createSafeElement('span', '', `👤 ${fav.activeCount || 0} active`);
+      const activeStat = createSafeElement('span');
+      activeStat.style.display = 'inline-flex';
+      activeStat.style.alignItems = 'center';
+      activeStat.style.gap = '4px';
+      activeStat.appendChild(getIcon('user', { class: 'hc-icon-sm' }));
+      activeStat.appendChild(document.createTextNode(` ${fav.activeCount || 0} active`));
       stats.appendChild(activeStat);
       
       if (fav.lastActiveAt) {
@@ -1385,7 +1554,8 @@ export class SpatialUI {
       if (snap && snap.exists()) {
         const data = snap.data();
         
-        if (titleEl) titleEl.textContent = data.alias || 'wanderer';
+        const profileAlias = (data.alias && String(data.alias).trim() !== '' && String(data.alias).trim() !== 'undefined') ? data.alias : 'wanderer';
+        if (titleEl) titleEl.textContent = profileAlias;
         if (themeEl) {
           themeEl.textContent = data.favoriteTheme || 'window-seat';
         }
@@ -1420,5 +1590,48 @@ export class SpatialUI {
       if (titleEl) titleEl.textContent = 'Error';
       if (bioEl) bioEl.textContent = 'Could not retrieve profile record.';
     }
+  }
+
+  clearTransientRoomUI() {
+    this.notes = [];
+    this.renderWall();
+    
+    this.objects = [];
+    this.renderObjects();
+    
+    this.queue = [];
+    this.renderQueue();
+    
+    this.history = [];
+    this.renderHistory();
+    
+    this.memories = [];
+    this.renderMemories();
+    
+    this.photos = [];
+    this.renderPhotos();
+    
+    if (this.elements.spotifyInput) (this.elements.spotifyInput as HTMLInputElement).value = '';
+    if (this.elements.youtubeInput) (this.elements.youtubeInput as HTMLInputElement).value = '';
+    
+    const movieInput = $<HTMLInputElement>('local-movie-input');
+    if (movieInput) movieInput.value = '';
+    
+    const photoFileInput = $<HTMLInputElement>('photo-file-input');
+    if (photoFileInput) photoFileInput.value = '';
+    
+    const photoCaptionInput = $<HTMLInputElement>('photo-caption-input');
+    if (photoCaptionInput) photoCaptionInput.value = '';
+    
+    const selectedPhotoName = $('selected-photo-name');
+    if (selectedPhotoName) selectedPhotoName.textContent = 'no file chosen';
+    
+    const photoUploadError = $('photo-upload-error');
+    if (photoUploadError) photoUploadError.style.display = 'none';
+
+    const profileNowPlaying = $('profile-now-playing-section');
+    if (profileNowPlaying) profileNowPlaying.style.display = 'none';
+    
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 }
