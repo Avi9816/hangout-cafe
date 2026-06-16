@@ -76,7 +76,8 @@ export interface RoomHistoryEvent {
     | 'object_placed'
     | 'host_changed'
     | 'room_created'
-    | 'photo_added';
+    | 'photo_added'
+    | 'whisper_left';
   text: string;
   createdAt: number;
   createdBy: string;

@@ -9,6 +9,7 @@ import { doc, getDoc, collection, query, orderBy, limit, getDocs } from 'firebas
 import { ROOM_CONFIG } from '../constants/app';
 import { getIcon } from './icons';
 import { getRoomSoul } from '../utils/roomSoul';
+import { getRoomEchoes } from '../utils/roomEchoes';
 
 function formatTimeAgo(timestamp: number): string {
     const seconds = Math.floor((Date.now() - timestamp) / 1000);
@@ -31,6 +32,7 @@ export class SpatialUI {
   history: RoomHistoryEvent[] = [];
   memories: RoomMemory[] = [];
   photos: RoomPhoto[] = [];
+  currentMetadata: any = null;
   
   elements: Record<string, HTMLElement | HTMLInputElement | null>;
 
@@ -79,6 +81,12 @@ export class SpatialUI {
           console.log('[DEBUG_SPATIAL_UI] Received sync:history, count =', history.length);
           this.history = Array.isArray(history) ? history : [];
           this.renderHistory();
+          this.renderEchoes();
+      });
+      this.bus.on(APP_EVENTS.ROOM_METADATA_UPDATED, (metadata: any) => {
+          console.log('[DEBUG_SPATIAL_UI] Received sync:room_metadata_updated:', metadata);
+          this.currentMetadata = metadata;
+          this.renderEchoes();
       });
       this.bus.on(APP_EVENTS.SYNC_MEMORIES, (memories: RoomMemory[]) => {
           console.log('[DEBUG_SPATIAL_UI] Received sync:memories, count =', memories.length);
@@ -942,6 +950,47 @@ export class SpatialUI {
             lastTapeDiv.style.display = 'none';
         }
     }
+  }
+
+  renderEchoes() {
+    const listEl = $('room-echoes-list');
+    if (!listEl) return;
+    listEl.innerHTML = '';
+
+    const echoes = getRoomEchoes({
+      history: this.history,
+      metadata: this.currentMetadata || undefined,
+      max: 3
+    });
+
+    if (echoes.length === 0) {
+      const emptyDiv = createSafeElement('div', 'echo-empty-state', 'No echoes yet. Leave something behind.');
+      listEl.appendChild(emptyDiv);
+      return;
+    }
+
+    const frag = document.createDocumentFragment();
+    echoes.forEach(echo => {
+      const itemDiv = createSafeElement('div', 'echo-item');
+      
+      const contentDiv = createSafeElement('div', 'echo-item-content');
+      
+      const dot = createSafeElement('div', `echo-dot tone-${echo.tone}`);
+      contentDiv.appendChild(dot);
+      
+      const textSpan = createSafeElement('span', '', echo.text);
+      contentDiv.appendChild(textSpan);
+      
+      itemDiv.appendChild(contentDiv);
+      
+      if (typeof echo.createdAt === 'number' && !isNaN(echo.createdAt) && echo.createdAt > 0) {
+        const timeSpan = createSafeElement('span', 'echo-time', formatTimeAgo(echo.createdAt));
+        itemDiv.appendChild(timeSpan);
+      }
+      
+      frag.appendChild(itemDiv);
+    });
+    listEl.appendChild(frag);
   }
 
   renderMemories() {
@@ -1887,6 +1936,9 @@ export class SpatialUI {
     const profileNowPlaying = $('profile-now-playing-section');
     if (profileNowPlaying) profileNowPlaying.style.display = 'none';
     
+    this.currentMetadata = null;
+    this.renderEchoes();
+
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 }

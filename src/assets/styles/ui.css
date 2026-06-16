@@ -1177,6 +1177,77 @@ h2 { font-family: var(--font-ui); font-size: clamp(1.8rem, 6vw, 2.2rem); font-we
   }
 }
 
+/* Room Echoes Styling */
+.room-echoes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: rgba(18, 14, 11, 0.4); /* dark warm panel */
+  border-radius: 8px;
+  border: 1px solid rgba(201, 130, 69, 0.15); /* subtle amber border */
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.echo-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.8rem;
+  color: rgba(245, 240, 230, 0.75); /* muted text */
+  padding: 4px 0;
+  box-sizing: border-box;
+}
+
+.echo-item-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.echo-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Tone accent dots colors - subtle, matching Cafe mood, no blue/purple */
+.echo-dot.tone-quiet {
+  background-color: rgba(160, 150, 140, 0.6); /* soft grey */
+}
+.echo-dot.tone-warm {
+  background-color: rgba(201, 130, 69, 0.7); /* warm amber */
+}
+.echo-dot.tone-memory {
+  background-color: rgba(220, 180, 120, 0.65); /* soft gold */
+}
+.echo-dot.tone-media {
+  background-color: rgba(225, 120, 100, 0.7); /* warm copper */
+}
+.echo-dot.tone-visitor {
+  background-color: rgba(175, 190, 150, 0.6); /* muted sage */
+}
+
+.echo-time {
+  font-size: 0.7rem;
+  opacity: 0.45;
+  font-style: italic;
+  white-space: nowrap;
+}
+
+.echo-empty-state {
+  text-align: center;
+  font-style: italic;
+  opacity: 0.5;
+  font-size: 0.8rem;
+  padding: 8px 0;
+  width: 100%;
+}
+
+
 
 
 
