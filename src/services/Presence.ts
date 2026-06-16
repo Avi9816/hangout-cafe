@@ -35,6 +35,7 @@ export class SharedPresence {
   notes: Note[] = [];
   objects: MemoryObject[] = [];
   currentVideoState: any = null;
+  currentRoomMetadata: any | null = null;
   lastActionTimestamp = 0;
   unsubNotes: Unsubscribe | null = null;
   useSubcollectionNotes = false;
@@ -549,6 +550,22 @@ export class SharedPresence {
       console.log('[DEBUG_LISTEN_ROOM] Callback fired! path:', docPath, 'exists:', snap.exists());
       if(snap.exists()) {
         const data = snap.data();
+        this.currentRoomMetadata = {
+            roomCode: this.roomCode,
+            displayName: data.displayName || this.roomCode,
+            theme: data.theme || 'window-seat',
+            createdAt: data.createdAt || 0,
+            lastActiveAt: data.lastActiveAt || 0,
+            activeCount: data.activeCount || 0,
+            memoryCount: data.memoryCount || 0,
+            photoCount: data.photoCount || 0,
+            visitorCount: data.visitorCount || 0,
+            visitCount: data.visitCount || 0,
+            currentTapeTitle: data.currentTapeTitle,
+            currentHost: data.currentHost
+        };
+        this.bus.emit(APP_EVENTS.ROOM_METADATA_UPDATED, this.currentRoomMetadata);
+
         if(data.latestAction && data.latestAction.sender !== this.userId) {
           const actionTime = data.latestAction.timestamp || 0;
           if (actionTime > this.lastActionTimestamp) {
@@ -629,6 +646,8 @@ export class SharedPresence {
             this.renderPresenceUI();
         }
       } else {
+          this.currentRoomMetadata = null;
+          this.bus.emit(APP_EVENTS.ROOM_METADATA_UPDATED, null);
           this.bus.emit(APP_EVENTS.REMOTE_NOTES_UPDATED, []);
           this.bus.emit(APP_EVENTS.REMOTE_OBJECTS_UPDATED, []);
       }
@@ -1260,7 +1279,9 @@ export class SharedPresence {
               queueCount: data.queueCount || 0,
               currentTapeTitle: data.currentTapeTitle,
               currentHost: data.currentHost,
-              isPrivate: data.isPrivate || false
+              isPrivate: data.isPrivate || false,
+              visitorCount: data.visitorCount || 0,
+              visitCount: data.visitCount || 0
           } as RoomDirectoryItem;
       });
 
@@ -1328,6 +1349,11 @@ export class SharedPresence {
               if (target) {
                 target.activeCount = rData.activeCount || 0;
                 target.lastActiveAt = rData.lastActiveAt || 0;
+                target.createdAt = rData.createdAt || 0;
+                target.memoryCount = rData.memoryCount || 0;
+                target.photoCount = rData.photoCount || 0;
+                target.visitorCount = rData.visitorCount || 0;
+                target.visitCount = rData.visitCount || 0;
                 this.bus.emit(APP_EVENTS.FAVORITES_UPDATED, this.favorites);
               }
             }
@@ -1345,7 +1371,12 @@ export class SharedPresence {
           theme: fav.theme,
           savedAt: fav.savedAt,
           activeCount: 0,
-          lastActiveAt: 0
+          lastActiveAt: 0,
+          createdAt: 0,
+          memoryCount: 0,
+          photoCount: 0,
+          visitorCount: 0,
+          visitCount: 0
         };
       });
 

@@ -949,6 +949,85 @@ h2 { font-family: var(--font-ui); font-size: clamp(1.8rem, 6vw, 2.2rem); font-we
   scroll-margin-bottom: 240px;
 }
 
+/* Room Soul Styling */
+.room-card-soul {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.4);
+  font-style: italic;
+  margin-top: 4px;
+  letter-spacing: 0.5px;
+  text-transform: lowercase;
+}
+
+.profile-soul-section {
+  margin-top: 16px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  padding: 12px;
+  border-radius: 6px;
+  text-align: left;
+}
+
+.profile-soul-kicker {
+  display: block;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.profile-soul-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-top: 4px;
+  color: #fff;
+}
+
+.profile-soul-desc {
+  font-size: 0.75rem;
+  opacity: 0.6;
+  margin-top: 2px;
+}
+
+.room-soul-line {
+  font-size: 0.75rem;
+  opacity: 0.6;
+  font-style: italic;
+  margin-top: 4px;
+  letter-spacing: 0.5px;
+}
+
+/* Room Soul Ambient Atmosphere Effects */
+#room-view.room-soul-quiet {
+  /* no extra effect */
+}
+
+#room-view.room-soul-remembered .room-hero {
+  border-color: rgba(201, 130, 69, 0.25);
+  box-shadow: 0 0 15px rgba(201, 130, 69, 0.05);
+}
+
+#room-view.room-soul-lived-in .room-hero,
+#room-view.room-soul-lived-in .media-card {
+  border-color: rgba(201, 130, 69, 0.35);
+  box-shadow: 0 0 20px rgba(201, 130, 69, 0.08);
+}
+
+#room-view.room-soul-old-soul .room-hero,
+#room-view.room-soul-old-soul .media-card {
+  border-color: rgba(201, 130, 69, 0.50);
+  box-shadow: inset 0 0 15px rgba(201, 130, 69, 0.05), 0 0 25px rgba(201, 130, 69, 0.12);
+}
+
+#room-view.room-soul-old-soul #room-memory-section {
+  background: rgba(201, 130, 69, 0.02);
+  border: 1px solid rgba(201, 130, 69, 0.1);
+  padding: 20px;
+  border-radius: 6px;
+}
+
+
 
 
 

@@ -8,6 +8,7 @@ import { db } from '../config/firebase';
 import { doc, getDoc, collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
 import { ROOM_CONFIG } from '../constants/app';
 import { getIcon } from './icons';
+import { getRoomSoul } from '../utils/roomSoul';
 
 function formatTimeAgo(timestamp: number): string {
     const seconds = Math.floor((Date.now() - timestamp) / 1000);
@@ -429,6 +430,15 @@ export class SpatialUI {
             timeMeta.style.fontStyle = 'italic';
             timeMeta.style.marginTop = '4px';
             card.appendChild(timeMeta);
+
+            if (!(window as any).roomMetadataCache) {
+                (window as any).roomMetadataCache = {};
+            }
+            (window as any).roomMetadataCache[room.roomCode] = room;
+
+            const soulObj = getRoomSoul(room);
+            const soulMeta = createSafeElement('div', 'room-card-soul', soulObj.shortDescription);
+            card.appendChild(soulMeta);
 
             const joinBtn = createSafeElement('button', 'text-btn explore-card-action', 'Enter room');
             joinBtn.addEventListener('click', (e) => {
@@ -1113,6 +1123,11 @@ export class SpatialUI {
     if (!modal) return;
     
     modal.style.display = 'flex';
+
+    const soulContainer = $('profile-soul-container');
+    if (soulContainer) {
+      soulContainer.hidden = true;
+    }
     
     const titleEl = $('profile-room-title');
     const themeEl = $('profile-room-theme');
@@ -1264,6 +1279,48 @@ export class SpatialUI {
       if (statVisitors) statVisitors.textContent = String(visitorCount);
       if (statVisits) statVisits.textContent = String(visitCount);
 
+      if (!(window as any).roomMetadataCache) {
+          (window as any).roomMetadataCache = {};
+      }
+      (window as any).roomMetadataCache[roomCode] = {
+        roomCode,
+        displayName: titleEl ? titleEl.textContent : roomCode,
+        theme: roomTheme,
+        createdAt,
+        lastActiveAt,
+        activeCount,
+        memoryCount,
+        photoCount,
+        queueCount,
+        visitorCount,
+        visitCount
+      };
+
+      if ((window as any).app?.environment) {
+        try {
+          (window as any).app.environment.updateRoomCards();
+        } catch (_) {}
+      }
+
+      const soulObj = getRoomSoul({
+        memoryCount,
+        photoCount,
+        visitorCount,
+        visitCount,
+        activeCount,
+        createdAt,
+        lastActiveAt
+      });
+
+      const profileSoulTitle = $('profile-soul-title');
+      const profileSoulDesc = $('profile-soul-desc');
+      const profileSoulContainer = $('profile-soul-container');
+      if (profileSoulContainer && profileSoulTitle && profileSoulDesc) {
+        profileSoulTitle.textContent = soulObj.label;
+        profileSoulDesc.textContent = soulObj.description;
+        profileSoulContainer.hidden = false;
+      }
+
       if (tapeTitle && nowPlayingSection && tapeTitleEl && tapeHostEl) {
         nowPlayingSection.style.display = 'flex';
         tapeTitleEl.textContent = tapeTitle;
@@ -1394,6 +1451,17 @@ export class SpatialUI {
         stats.appendChild(lastActiveStat);
       }
       card.appendChild(stats);
+
+      if (!(window as any).roomMetadataCache) {
+          (window as any).roomMetadataCache = {};
+      }
+      if (fav.createdAt || fav.memoryCount || fav.photoCount || fav.visitorCount || fav.visitCount) {
+          (window as any).roomMetadataCache[fav.roomCode] = fav;
+      }
+
+      const soulObj = getRoomSoul(fav);
+      const soulMeta = createSafeElement('div', 'room-card-soul', soulObj.shortDescription);
+      card.appendChild(soulMeta);
 
       const joinBtn = createSafeElement('button', 'text-btn favorite-card-action', 'Enter room');
       joinBtn.addEventListener('click', (e) => {

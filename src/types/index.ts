@@ -129,4 +129,6 @@ export interface RoomDirectoryItem {
   currentTapeTitle?: string;
   currentHost?: string;
   isPrivate: boolean;
+  visitorCount?: number;
+  visitCount?: number;
 }

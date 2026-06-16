@@ -7,6 +7,7 @@ import { ROOM_CONFIG } from '../constants/app';
 import { devLog } from '../utils/logger';
 import { getIcon } from '../ui/icons';
 import { applyAtmosphere } from '../themes/atmosphere';
+import { getRoomSoul } from '../utils/roomSoul';
 
 export class Environment {
   private bus: EventBus;
@@ -71,6 +72,10 @@ export class Environment {
                   this.changePublicRoom(data.room);
               }
           }
+      });
+
+      this.bus.on(APP_EVENTS.ROOM_METADATA_UPDATED, (metadata: any) => {
+          this.handleRoomMetadataUpdated(metadata);
       });
 
       this.bus.on(APP_EVENTS.USER_COUNT_UPDATED, (count: number) => {
@@ -208,6 +213,8 @@ export class Environment {
             const desc = createSafeElement('span', 'room-card-desc', theme.desc);
             const meta = createSafeElement('span', 'room-card-meta', '0 souls resting');
             meta.id = `meta-${key}`;
+            const soulLine = createSafeElement('span', 'room-card-soul', 'still quiet.');
+            soulLine.id = `soul-${key}`;
             
             const enterBtn = createSafeElement('button', 'text-btn dest-card-join', 'Enter room');
             enterBtn.style.marginTop = '8px';
@@ -217,6 +224,7 @@ export class Environment {
             card.appendChild(name); 
             card.appendChild(desc); 
             card.appendChild(meta);
+            card.appendChild(soulLine);
             card.appendChild(enterBtn);
 
             card.addEventListener('mouseenter', () => this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'soft_click'));
@@ -274,13 +282,21 @@ export class Environment {
     });
   }
 
-  private updateRoomCards() {
+  public updateRoomCards() {
+      const cache = (window as any).roomMetadataCache || {};
       $$('.dest-btn').forEach(btn => {
           const key = btn.dataset.room;
           if (key === this.currentRoom && !this.isPrivate) btn.classList.add('active');
           else btn.classList.remove('active');
           const meta = btn.querySelector('.room-card-meta');
           if (meta && key === this.currentRoom) meta.textContent = `${this.activeUserCount} souls resting`;
+
+          const soulText = btn.querySelector('.room-card-soul');
+          if (soulText && key) {
+              const metaData = cache[key] || {};
+              const soulObj = getRoomSoul(metaData);
+              soulText.textContent = soulObj.shortDescription;
+          }
       });
   }
 
@@ -364,6 +380,27 @@ export class Environment {
     this.updateRoomCards();
     if(this.elements.roomTitle) this.elements.roomTitle.textContent = theme.name; 
     applyAtmosphere(roomKey);
+
+    // Apply immediate Room Soul text and CSS class from cache
+    const cache = (window as any).roomMetadataCache || {};
+    const metaData = cache[roomKey] || { roomCode: roomKey };
+    const soulObj = getRoomSoul(metaData);
+    const soulTextEl = $('room-soul-text');
+    if (soulTextEl) {
+        soulTextEl.textContent = `This room ${soulObj.shortDescription.toLowerCase()}`;
+    }
+    const roomView = $('room-view');
+    if (roomView) {
+        const classesToRemove: string[] = [];
+        roomView.classList.forEach(cls => {
+            if (cls.startsWith('room-soul-')) {
+                classesToRemove.push(cls);
+            }
+        });
+        classesToRemove.forEach(cls => roomView.classList.remove(cls));
+        roomView.classList.add(soulObj.cssClass);
+    }
+
     this.renderWeather(); 
     this.stationLoop(roomKey === 'last-train');
     this.transitionToRoomView();
@@ -375,12 +412,82 @@ export class Environment {
     if(this.elements.roomTitle) this.elements.roomTitle.textContent = cornerName.replace(/-/g, ' ');
     applyAtmosphere('default');
     if(this.elements.roomDesc) this.elements.roomDesc.textContent = "a hidden space, shared only with those you invite.";
+    
+    // Private room is always quiet
+    const soulTextEl = $('room-soul-text');
+    if (soulTextEl) {
+        soulTextEl.textContent = 'This room is still quiet.';
+    }
+    const roomView = $('room-view');
+    if (roomView) {
+        const classesToRemove: string[] = [];
+        roomView.classList.forEach(cls => {
+            if (cls.startsWith('room-soul-')) {
+                classesToRemove.push(cls);
+            }
+        });
+        classesToRemove.forEach(cls => roomView.classList.remove(cls));
+        roomView.classList.add('room-soul-quiet');
+    }
+
     document.documentElement.style.setProperty('--sky-top', '#100508'); 
     document.documentElement.style.setProperty('--sky-bottom', '#1a080c'); 
     document.documentElement.style.setProperty('--accent', '#e53e3e');
     this.renderWeather(); 
     this.stationLoop(false);
     this.transitionToRoomView();
+  }
+
+  private handleRoomMetadataUpdated(metadata: any) {
+      if (!metadata) {
+          const soulTextEl = $('room-soul-text');
+          if (soulTextEl) {
+              soulTextEl.textContent = '';
+          }
+          const roomView = $('room-view');
+          if (roomView) {
+              const classesToRemove: string[] = [];
+              roomView.classList.forEach(cls => {
+                  if (cls.startsWith('room-soul-')) {
+                      classesToRemove.push(cls);
+                  }
+              });
+              classesToRemove.forEach(cls => roomView.classList.remove(cls));
+              roomView.classList.add('room-soul-quiet');
+          }
+          return;
+      }
+
+      // Cache metadata
+      if (!(window as any).roomMetadataCache) {
+          (window as any).roomMetadataCache = {};
+      }
+      (window as any).roomMetadataCache[metadata.roomCode] = metadata;
+
+      // Update lobby cards
+      this.updateRoomCards();
+
+      // If we are currently inside this room, update Room Hero and room-view CSS class
+      if (metadata.roomCode === this.currentRoom && !this.isPrivate) {
+          const soulObj = getRoomSoul(metadata);
+          
+          const soulTextEl = $('room-soul-text');
+          if (soulTextEl) {
+              soulTextEl.textContent = `This room ${soulObj.shortDescription.toLowerCase()}`;
+          }
+
+          const roomView = $('room-view');
+          if (roomView) {
+              const classesToRemove: string[] = [];
+              roomView.classList.forEach(cls => {
+                  if (cls.startsWith('room-soul-')) {
+                      classesToRemove.push(cls);
+                  }
+              });
+              classesToRemove.forEach(cls => roomView.classList.remove(cls));
+              roomView.classList.add(soulObj.cssClass);
+          }
+      }
   }
 
   renderWeather() {

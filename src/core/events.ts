@@ -7,6 +7,7 @@ export const APP_EVENTS = {
   ROOM_JOIN_REQUEST: 'world:join_request',
   ROOM_CHANGED: 'world:room_changed',
   ROOM_PROFILE_REQUEST: 'local:room_profile_request',
+  ROOM_METADATA_UPDATED: 'sync:room_metadata_updated',
   TIME_TICK: 'world:time_tick',
   USER_COUNT_UPDATED: 'world:user_count',
 

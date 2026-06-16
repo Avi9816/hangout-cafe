@@ -136,6 +136,7 @@
     <div class="room-hero" id="header-section" aria-labelledby="room-title">
       <h1 id="room-title">Late Night Café</h1>
       <p class="subtitle room-mood-line" id="room-desc">a forgotten place on the internet.</p>
+      <p class="room-soul-line" id="room-soul-text"></p>
       <div class="room-presence-list" id="room-presence-list" aria-live="polite"></div>
       <div class="room-hero-actions">
         <button class="text-btn" id="btn-invite" style="display: none;" aria-label="Copy invitation link">invite someone into this corner</button>
@@ -331,6 +332,13 @@
         <span class="meta-label">Total Visits</span>
         <span class="meta-val" id="profile-stat-visits">-</span>
       </div>
+    </div>
+
+    <!-- Room Soul Section -->
+    <div class="profile-soul-section" id="profile-soul-container" hidden>
+      <span class="profile-soul-kicker">This room feels...</span>
+      <div class="profile-soul-title" id="profile-soul-title"></div>
+      <div class="profile-soul-desc" id="profile-soul-desc"></div>
     </div>
 
     <!-- Now Playing Tape -->
