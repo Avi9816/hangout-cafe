@@ -97,7 +97,8 @@ export interface RoomMemory {
     | 'note'
     | 'object'
     | 'tape'
-    | 'moment';
+    | 'moment'
+    | 'whisper';
   title: string;
   description?: string;
   createdAt: number;

@@ -84,6 +84,7 @@ export class SpatialUI {
           console.log('[DEBUG_SPATIAL_UI] Received sync:memories, count =', memories.length);
           this.memories = Array.isArray(memories) ? memories : [];
           this.renderMemories();
+          this.renderWhispers();
       });
       this.bus.on(APP_EVENTS.SYNC_PHOTOS, (photos: RoomPhoto[]) => {
           console.log('[DEBUG_SPATIAL_UI] Received sync:photos, count =', photos.length);
@@ -290,6 +291,94 @@ export class SpatialUI {
         const modal = $('public-profile-modal');
         if (modal) modal.style.display = 'none';
     });
+
+    // Future Whispers Listeners
+    const whisperInput = $<HTMLTextAreaElement>('whisper-input');
+    const btnLeaveWhisper = $<HTMLButtonElement>('btn-leave-whisper');
+    const whisperCharCount = $('whisper-char-count');
+    const whisperError = $('whisper-error');
+    const whisperSuccess = $('whisper-success');
+
+    if (whisperInput && btnLeaveWhisper && whisperCharCount && whisperError && whisperSuccess) {
+        whisperInput.addEventListener('input', () => {
+            const len = whisperInput.value.length;
+            whisperCharCount.textContent = `${len} / 180`;
+        });
+
+        btnLeaveWhisper.addEventListener('click', async () => {
+            const presence = (window as any).presence;
+            if (!presence || !presence.userId) {
+                whisperError.textContent = 'Write a few words first.';
+                whisperError.style.display = 'block';
+                return;
+            }
+
+            const text = whisperInput.value.trim();
+            whisperError.style.display = 'none';
+            whisperSuccess.style.display = 'none';
+
+            // Validate empty
+            if (!text) {
+                whisperError.textContent = 'Write a few words first.';
+                whisperError.style.display = 'block';
+                return;
+            }
+
+            // Require at least 2 visible non-whitespace characters
+            const nonWhitespaceCount = text.replace(/\s/g, '').length;
+            if (nonWhitespaceCount < 2) {
+                whisperError.textContent = 'Write a few words first.';
+                whisperError.style.display = 'block';
+                return;
+            }
+
+            // Reject if message is only symbols/spaces (must contain at least one Unicode letter or number)
+            const hasAlphanumeric = /[\p{L}\p{N}]/u.test(text);
+            if (!hasAlphanumeric) {
+                whisperError.textContent = 'Write a few words first.';
+                whisperError.style.display = 'block';
+                return;
+            }
+
+            // Max length check in TS
+            if (text.length > 180) {
+                whisperError.textContent = 'Whisper is too long.';
+                whisperError.style.display = 'block';
+                return;
+            }
+
+            // Prevent double-submit
+            btnLeaveWhisper.disabled = true;
+            whisperInput.disabled = true;
+            this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'soft_click');
+
+            try {
+                await presence.saveMemory({
+                    type: 'whisper',
+                    title: 'A whisper for later',
+                    description: text,
+                    payload: { text }
+                });
+
+                whisperSuccess.textContent = 'Your whisper was left for later.';
+                whisperSuccess.style.display = 'block';
+                whisperInput.value = '';
+                whisperCharCount.textContent = '0 / 180';
+                this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'paper_pin');
+
+                setTimeout(() => {
+                    whisperSuccess.style.display = 'none';
+                }, 4000);
+            } catch (err: any) {
+                console.error('[WHISPER_SAVE_ERROR]', err);
+                whisperError.textContent = err.message || 'Failed to leave whisper.';
+                whisperError.style.display = 'block';
+            } finally {
+                btnLeaveWhisper.disabled = false;
+                whisperInput.disabled = false;
+            }
+        });
+    }
   }
 
   setupTabListeners() {
@@ -863,9 +952,12 @@ export class SpatialUI {
     const presence = (window as any).presence;
     if (!presence) return;
 
+    // Filter out whispers from the main pinned memories list
+    const nonWhispers = this.memories.filter(m => m && m.type !== 'whisper');
+
     // Combine memories and photos as first-class room memories
     const combined: any[] = [
-      ...this.memories.map(m => ({ ...m, isPhoto: false })),
+      ...nonWhispers.map(m => ({ ...m, isPhoto: false })),
       ...this.photos.map(p => ({
         id: p.id,
         type: 'photo',
@@ -1057,6 +1149,107 @@ export class SpatialUI {
         itemDiv.appendChild(actionsDiv);
         frag.appendChild(itemDiv);
     });
+    listEl.appendChild(frag);
+  }
+
+  renderWhispers() {
+    const listEl = $('room-whispers-list');
+    if (!listEl) return;
+    listEl.innerHTML = '';
+
+    const presence = (window as any).presence;
+    if (!presence) return;
+
+    // Filter memories of type 'whisper'
+    const whispers = this.memories
+      .filter(m => m && m.type === 'whisper')
+      .sort((a, b) => {
+          const aTime = a.createdAt || 0;
+          const bTime = b.createdAt || 0;
+          return bTime - aTime;
+      });
+
+    if (whispers.length === 0) {
+        return;
+    }
+
+    // Limit display to latest 5 whispers
+    const latestWhispers = whispers.slice(0, 5);
+
+    const frag = document.createDocumentFragment();
+    latestWhispers.forEach(item => {
+        const itemDiv = createSafeElement('div', 'whisper-card');
+
+        // Message text element
+        const textDiv = createSafeElement('div');
+        textDiv.style.fontSize = '0.85rem';
+        textDiv.style.color = '#e2e8f0';
+        textDiv.style.lineHeight = '1.4';
+        textDiv.style.fontStyle = 'italic';
+        textDiv.style.textAlign = 'left';
+        
+        const rawText = item.description || (item.payload && item.payload.text) || '';
+        textDiv.textContent = rawText;
+
+        // Attribution row
+        const metaDiv = createSafeElement('div');
+        metaDiv.style.display = 'flex';
+        metaDiv.style.justifyContent = 'space-between';
+        metaDiv.style.alignItems = 'center';
+        metaDiv.style.fontSize = '0.7rem';
+        metaDiv.style.opacity = '0.5';
+        metaDiv.style.marginTop = '4px';
+
+        const creatorName = item.createdBy || 'wanderer';
+        let timeStr = 'left sometime ago';
+        if (item.createdAt && typeof item.createdAt === 'number' && !isNaN(item.createdAt)) {
+            timeStr = formatTimeAgo(item.createdAt);
+            if (timeStr.includes('NaN') || timeStr.includes('Invalid') || timeStr.includes('undefined')) {
+                timeStr = 'left sometime ago';
+            }
+        }
+
+        const authorTimeDiv = createSafeElement('div');
+        authorTimeDiv.style.display = 'flex';
+        authorTimeDiv.style.gap = '6px';
+        
+        const authorSpan = createSafeElement('span');
+        authorSpan.textContent = `left by ${creatorName}`;
+        
+        const dotSpan = createSafeElement('span');
+        dotSpan.textContent = '·';
+        
+        const timeSpan = createSafeElement('span');
+        timeSpan.textContent = timeStr;
+
+        authorTimeDiv.appendChild(authorSpan);
+        authorTimeDiv.appendChild(dotSpan);
+        authorTimeDiv.appendChild(timeSpan);
+
+        metaDiv.appendChild(authorTimeDiv);
+
+        // Delete button for creator only
+        if (presence.userId && item.creatorUid === presence.userId) {
+            const deleteBtn = createSafeElement('button', 'text-btn', 'delete');
+            deleteBtn.style.padding = '0';
+            deleteBtn.style.fontSize = '0.7rem';
+            deleteBtn.style.margin = '0';
+            deleteBtn.style.color = 'var(--accent)';
+            deleteBtn.style.background = 'none';
+            deleteBtn.style.border = 'none';
+            deleteBtn.style.cursor = 'pointer';
+            deleteBtn.addEventListener('click', () => {
+                this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'soft_click');
+                presence.removeMemory(item.id);
+            });
+            metaDiv.appendChild(deleteBtn);
+        }
+
+        itemDiv.appendChild(textDiv);
+        itemDiv.appendChild(metaDiv);
+        frag.appendChild(itemDiv);
+    });
+
     listEl.appendChild(frag);
   }
 
@@ -1675,6 +1868,7 @@ export class SpatialUI {
     
     this.memories = [];
     this.renderMemories();
+    this.renderWhispers();
     
     this.photos = [];
     this.renderPhotos();

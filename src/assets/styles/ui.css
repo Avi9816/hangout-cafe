@@ -1027,6 +1027,88 @@ h2 { font-family: var(--font-ui); font-size: clamp(1.8rem, 6vw, 2.2rem); font-we
   border-radius: 6px;
 }
 
+/* Future Whispers Styling */
+.future-whispers-section {
+  width: 100%;
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid rgba(232, 218, 196, 0.08);
+  box-sizing: border-box;
+}
+
+.future-whisper-form {
+  width: 100%;
+  max-width: none;
+  margin-top: 14px;
+  box-sizing: border-box;
+}
+
+#whisper-input {
+  width: 100%;
+  min-height: 92px;
+  box-sizing: border-box;
+  resize: vertical;
+}
+
+.whisper-actions-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+#btn-leave-whisper {
+  flex: 0 0 auto;
+}
+
+#whisper-char-count {
+  flex: 0 0 auto;
+  opacity: 0.55;
+  font-size: 0.75rem;
+}
+
+#room-whispers-list {
+  width: 100%;
+  margin-top: 18px;
+  box-sizing: border-box;
+}
+
+.whisper-card {
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 14px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-left: 3px solid rgba(201, 130, 69, 0.4);
+  transition: all 0.3s ease;
+  margin-bottom: 8px;
+}
+
+#photo-wall-section {
+  margin-top: 32px;
+}
+
+@media (max-width: 768px) {
+  .whisper-actions-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  #btn-leave-whisper {
+    width: 100%;
+  }
+
+  #whisper-char-count {
+    align-self: flex-end;
+  }
+}
+
+
 
 
 

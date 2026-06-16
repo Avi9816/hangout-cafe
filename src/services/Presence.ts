@@ -1097,7 +1097,7 @@ export class SharedPresence {
       return false;
   }
 
-  async addHistoryEvent(type: 'tape_played' | 'note_pinned' | 'object_placed' | 'host_changed' | 'room_created' | 'photo_added', text: string) {
+  async addHistoryEvent(type: 'tape_played' | 'note_pinned' | 'object_placed' | 'host_changed' | 'room_created' | 'photo_added' | 'whisper_left', text: string) {
       if (!this.userId || !db || !this.roomCode) return;
       devLog('[ROOM_HISTORY] Writing history event:', type, text);
       const historyCol = collection(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'history');
@@ -1129,6 +1129,10 @@ export class SharedPresence {
               memoryCount: increment(1),
               updatedAt: Date.now()
           }).catch(err => console.error('Error updating memoryCount:', err));
+
+          if (memory.type === 'whisper') {
+              this.addHistoryEvent('whisper_left', `${this.profile?.alias || 'wanderer'} left a whisper for later.`);
+          }
 
           if (this.profile) {
               const profileRef = doc(db!, 'artifacts', this.appId, 'users', this.userId!, 'userData', 'profile');
