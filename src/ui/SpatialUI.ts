@@ -996,14 +996,7 @@ export class SpatialUI {
 
     const frag = document.createDocumentFragment();
     combined.forEach(item => {
-        const itemDiv = createSafeElement('div');
-        itemDiv.style.display = 'flex';
-        itemDiv.style.justifyContent = 'space-between';
-        itemDiv.style.alignItems = 'center';
-        itemDiv.style.padding = '10px 14px';
-        itemDiv.style.borderRadius = '6px';
-        itemDiv.style.marginBottom = '8px';
-        itemDiv.style.transition = 'all 0.3s ease';
+        const itemDiv = createSafeElement('div', 'room-memory-card');
 
         let iconName = 'room';
         let leftBorderColor = '';

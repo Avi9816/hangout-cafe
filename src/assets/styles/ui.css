@@ -1027,7 +1027,34 @@ h2 { font-family: var(--font-ui); font-size: clamp(1.8rem, 6vw, 2.2rem); font-we
   border-radius: 6px;
 }
 
-/* Future Whispers Styling */
+/* Future Whispers & Room Memory Layout Styling */
+.room-memory-section {
+  width: 100%;
+}
+
+.room-memory-subsection {
+  width: 100%;
+  margin-top: 28px;
+  box-sizing: border-box;
+}
+
+#room-history-subsection {
+  margin-top: 0;
+}
+
+.room-memory-card {
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  transition: all 0.3s ease;
+}
+
 .future-whispers-section {
   width: 100%;
   margin-top: 28px;
@@ -1090,7 +1117,40 @@ h2 { font-family: var(--font-ui); font-size: clamp(1.8rem, 6vw, 2.2rem); font-we
 }
 
 #photo-wall-section {
+  width: 100%;
   margin-top: 32px;
+  box-sizing: border-box;
+}
+
+.photo-wall-section,
+.photo-upload-panel,
+#photo-wall-grid {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.photo-upload-panel {
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: rgba(0,0,0,0.15);
+  padding: 20px;
+  border-radius: 8px;
+  border: 1px solid var(--border-soft);
+  text-align: left;
+}
+
+/* Headings and Spacing Alignment */
+.room-memory-section h2,
+.room-memory-section h3,
+.future-whispers-section h3,
+#photo-wall-section h2,
+#photo-wall-section h3 {
+  margin-left: 0;
+  margin-right: 0;
 }
 
 @media (max-width: 768px) {
@@ -1105,6 +1165,15 @@ h2 { font-family: var(--font-ui); font-size: clamp(1.8rem, 6vw, 2.2rem); font-we
 
   #whisper-char-count {
     align-self: flex-end;
+  }
+
+  .room-memory-card,
+  .whisper-card,
+  .future-whisper-form,
+  #photo-wall-section,
+  .photo-upload-panel {
+    width: 100%;
+    max-width: none;
   }
 }
 
