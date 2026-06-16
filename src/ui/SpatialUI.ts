@@ -60,17 +60,17 @@ export class SpatialUI {
 
   private setupBusListeners() {
       this.bus.on(APP_EVENTS.REMOTE_NOTES_UPDATED, (notes: Note[]) => {
-          console.log('[DEBUG_SPATIAL_UI] Received REMOTE_NOTES_UPDATED, count =', notes.length);
+          devLog('[DEBUG_SPATIAL_UI] Received REMOTE_NOTES_UPDATED, count =', notes.length);
           this.notes = Array.isArray(notes) ? notes : [];
           this.renderWall();
       });
       this.bus.on(APP_EVENTS.REMOTE_OBJECTS_UPDATED, (objects: MemoryObject[]) => {
-          console.log('[DEBUG_SPATIAL_UI] Received REMOTE_OBJECTS_UPDATED, count =', objects.length);
+          devLog('[DEBUG_SPATIAL_UI] Received REMOTE_OBJECTS_UPDATED, count =', objects.length);
           this.objects = Array.isArray(objects) ? objects : [];
           this.renderObjects();
       });
       this.bus.on(APP_EVENTS.SYNC_QUEUE, (queue: QueueItem[]) => {
-          console.log('[DEBUG_SPATIAL_UI] Received sync:queue, count =', queue.length);
+          devLog('[DEBUG_SPATIAL_UI] Received sync:queue, count =', queue.length);
           this.queue = Array.isArray(queue) ? queue : [];
           this.renderQueue();
       });
@@ -78,24 +78,24 @@ export class SpatialUI {
           this.renderQueue();
       });
       this.bus.on(APP_EVENTS.SYNC_HISTORY, (history: RoomHistoryEvent[]) => {
-          console.log('[DEBUG_SPATIAL_UI] Received sync:history, count =', history.length);
+          devLog('[DEBUG_SPATIAL_UI] Received sync:history, count =', history.length);
           this.history = Array.isArray(history) ? history : [];
           this.renderHistory();
           this.renderEchoes();
       });
       this.bus.on(APP_EVENTS.ROOM_METADATA_UPDATED, (metadata: any) => {
-          console.log('[DEBUG_SPATIAL_UI] Received sync:room_metadata_updated:', metadata);
+          devLog('[DEBUG_SPATIAL_UI] Received sync:room_metadata_updated');
           this.currentMetadata = metadata;
           this.renderEchoes();
       });
       this.bus.on(APP_EVENTS.SYNC_MEMORIES, (memories: RoomMemory[]) => {
-          console.log('[DEBUG_SPATIAL_UI] Received sync:memories, count =', memories.length);
+          devLog('[DEBUG_SPATIAL_UI] Received sync:memories, count =', memories.length);
           this.memories = Array.isArray(memories) ? memories : [];
           this.renderMemories();
           this.renderWhispers();
       });
       this.bus.on(APP_EVENTS.SYNC_PHOTOS, (photos: RoomPhoto[]) => {
-          console.log('[DEBUG_SPATIAL_UI] Received sync:photos, count =', photos.length);
+          devLog('[DEBUG_SPATIAL_UI] Received sync:photos, count =', photos.length);
           this.photos = Array.isArray(photos) ? photos : [];
           this.renderPhotos();
           this.renderMemories(); // Refresh memories because photos are merged
@@ -116,7 +116,7 @@ export class SpatialUI {
           this.openRoomProfile(roomCode);
       });
       this.bus.on(APP_EVENTS.FAVORITES_UPDATED, (favorites: any[]) => {
-          console.log('[DEBUG_SPATIAL_UI] Received local:favorites_updated, count =', favorites.length);
+          devLog('[DEBUG_SPATIAL_UI] Received local:favorites_updated, count =', favorites.length);
           this.renderFavorites(favorites);
       });
   }
@@ -135,22 +135,6 @@ export class SpatialUI {
     $('btn-post-note')?.addEventListener('click', postNote);
     this.elements.noteInput?.addEventListener('keydown', (e: any) => { if(e.key === 'Enter') postNote(); });
 
-    /* Soft-removed table-obj-btn listeners
-    $$('.table-obj-btn').forEach(btn => {
-      if (btn.dataset.obj) {
-          btn.addEventListener('click', (e: MouseEvent) => {
-            this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'wood_creak');
-            const objType = (e.currentTarget as HTMLElement).dataset.obj;
-            if (!objType) return;
-            const emojis: Record<string, string> = { 'coffee': '☕', 'book': '📖', 'polaroid': '🎞️', 'lamp': '🕯️' };
-            const labels: Record<string, string> = { 'coffee': 'warm coffee', 'book': 'open book', 'polaroid': 'forgotten polaroid', 'lamp': 'glowing lamp' };
-            const obj: MemoryObject = { emoji: emojis[objType], label: labels[objType], author: 'wanderer', id: Date.now() };
-            devLog('[OBJECT_PLACED_EMIT]', obj);
-            this.bus.emit(APP_EVENTS.OBJECT_PLACED, obj);
-          });
-      }
-    });
-    */
 
     const playSpotify = () => {
         const url = (this.elements.spotifyInput as HTMLInputElement)?.value.trim(); 
@@ -422,10 +406,10 @@ export class SpatialUI {
   }
 
   async loadAndRenderExploreRooms(tab: string) {
-    console.log('[DEBUG_EXPLORE] loadAndRenderExploreRooms called with tab:', tab);
+    devLog('[DEBUG_EXPLORE] loadAndRenderExploreRooms called with tab:', tab);
     const gridEl = $('explore-grid');
     if (!gridEl) {
-        console.log('[DEBUG_EXPLORE] explore-grid element not found!');
+        devLog('[DEBUG_EXPLORE] explore-grid element not found!');
         return;
     }
 
@@ -433,14 +417,14 @@ export class SpatialUI {
 
     const presence = (window as any).presence;
     if (!presence) {
-        console.log('[DEBUG_EXPLORE] window.presence not found!');
+        devLog('[DEBUG_EXPLORE] window.presence not found!');
         return;
     }
 
     try {
-        console.log('[DEBUG_EXPLORE] Calling loadExploreRooms...');
+        devLog('[DEBUG_EXPLORE] Calling loadExploreRooms...');
         const rooms = await presence.loadExploreRooms(tab);
-        console.log('[DEBUG_EXPLORE] loadExploreRooms returned rooms:', JSON.stringify(rooms));
+        devLog('[DEBUG_EXPLORE] loadExploreRooms returned rooms, count:', rooms.length);
         gridEl.innerHTML = '';
         
         if (!rooms || rooms.length === 0) {
@@ -565,10 +549,10 @@ export class SpatialUI {
   }
 
   renderWall() {
-    console.log('[DEBUG_SPATIAL_UI] renderWall called, notes count =', this.notes.length);
+    devLog('[DEBUG_SPATIAL_UI] renderWall called, notes count =', this.notes.length);
     const wall = this.elements.wall;
     if(!wall) {
-        console.log('[DEBUG_SPATIAL_UI] renderWall complete (no wall element)');
+        devLog('[DEBUG_SPATIAL_UI] renderWall complete (no wall element)');
         return;
     }
     wall.innerHTML = ''; 
@@ -611,14 +595,14 @@ export class SpatialUI {
       frag.appendChild(div);
     });
     wall.appendChild(frag);
-    console.log('[DEBUG_SPATIAL_UI] renderWall complete, DOM nodes count =', wall.childNodes.length);
+    devLog('[DEBUG_SPATIAL_UI] renderWall complete, DOM nodes count =', wall.childNodes.length);
   }
 
   renderObjects() {
-    console.log('[DEBUG_SPATIAL_UI] renderObjects called, objects count =', this.objects.length);
+    devLog('[DEBUG_SPATIAL_UI] renderObjects called, objects count =', this.objects.length);
     const table = this.elements.table;
     if(!table) {
-        console.log('[DEBUG_SPATIAL_UI] renderObjects complete (no table element)');
+        devLog('[DEBUG_SPATIAL_UI] renderObjects complete (no table element)');
         return;
     }
     table.innerHTML = ''; 
@@ -675,7 +659,7 @@ export class SpatialUI {
       frag.appendChild(div);
     });
     table.appendChild(frag);
-    console.log('[DEBUG_SPATIAL_UI] renderObjects complete, DOM nodes count =', table.childNodes.length);
+    devLog('[DEBUG_SPATIAL_UI] renderObjects complete, DOM nodes count =', table.childNodes.length);
   }
 
   renderQueue() {

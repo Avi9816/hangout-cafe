@@ -127,7 +127,6 @@
         <button class="text-btn" id="btn-create-private" aria-label="Join private room">step into the dark</button>
       </div>
     </section>
-    <div id="first-night-guide-container"></div>
   </div>
   <div id="room-view" class="view-transition view-hidden">
 
@@ -538,6 +537,9 @@
     <feComposite operator="in" in2="SourceGraphic" />
   </filter>
 </svg>
+
+<!-- GUIDE OVERLAY — direct child of body to avoid CSS transform containing block issues -->
+<div id="first-night-guide-container"></div>
 
 <!-- Global Film Grain Overlay -->
 <div id="global-grain"></div>

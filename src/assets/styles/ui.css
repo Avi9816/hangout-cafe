@@ -138,13 +138,7 @@ h2 { font-family: var(--font-ui); font-size: clamp(1.8rem, 6vw, 2.2rem); font-we
 .obj-btn, .theme-btn { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); color: #fff; padding: 10px 20px; font-family: var(--font-ui); font-size: 0.8rem; border-radius: 6px; cursor: pointer; transition: all 0.3s ease; font-weight: 400; opacity: 0.7; }
 .obj-btn:hover, .theme-btn:hover { background: rgba(255,255,255,0.1); opacity: 1; border-color: var(--accent); }
 
-/* Table Objects styles commented out for soft-removal
-.table-obj-btn { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); color: #fff; padding: 10px 20px; font-family: var(--font-ui); font-size: 0.8rem; border-radius: 6px; cursor: pointer; transition: all 0.3s ease; font-weight: 400; opacity: 0.7; }
-.table-obj-btn:hover { background: rgba(255,255,255,0.1); opacity: 1; border-color: var(--accent); }
-#memory-table { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 40px; min-height: 40px; }
-.memory-object { display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 24px; font-family: var(--font-ui); color: #fff; font-size: 1.1rem; animation: gentleFloat 6s infinite alternate ease-in-out; transition: all 1s ease; cursor: default; flex: 1 1 calc(50% - 16px); max-width: calc(50% - 16px); font-weight: 300; }
-.memory-object span.emoji { font-size: 2.5rem; margin-bottom: 12px; filter: drop-shadow(0 5px 15px rgba(0,0,0,0.5)); }
-*/
+
 .memory-host { font-family: var(--font-ui); font-size: 0.7rem; color: var(--text-muted); margin-top: 10px; font-style: italic; letter-spacing: 0.5px; font-weight: 700; text-transform: lowercase; }
 
 .host-label { font-family: var(--font-ui); font-size: 0.8rem; color: var(--accent); margin-bottom: 16px; font-style: italic; opacity: 0; transition: opacity 1s ease; font-weight: 400; }

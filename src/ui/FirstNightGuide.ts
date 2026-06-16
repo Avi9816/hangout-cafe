@@ -1,6 +1,7 @@
 import { EventBus } from '../core/EventBus';
 import { APP_EVENTS } from '../core/events';
 import { $ } from '../utils/dom';
+import { devLog } from '../utils/logger';
 
 export interface GuideStepConfig {
   title: string;
@@ -11,7 +12,7 @@ export interface GuideStepConfig {
   scrollTargetSelector: string | null;
 }
 
-const GUIDE_VERSION = 'v1';
+const GUIDE_VERSION = 'v2';
 const LOCAL_STORAGE_KEY = 'lateNightCafe.firstNightGuide.version';
 
 const GUIDE_CONFIG: GuideStepConfig[] = [
@@ -62,6 +63,7 @@ export class FirstNightGuide {
 
   private boundOnRoomChanged = this.onRoomChanged.bind(this);
   private boundOnKeyDown = this.onKeyDown.bind(this);
+  private boundOnIdentityReady = this.onIdentityReady.bind(this);
 
   constructor(eventBus: EventBus) {
     this.bus = eventBus;
@@ -77,6 +79,7 @@ export class FirstNightGuide {
     }
 
     this.bus.on(APP_EVENTS.ROOM_CHANGED, this.boundOnRoomChanged);
+    this.bus.on(APP_EVENTS.IDENTITY_READY, this.boundOnIdentityReady);
     window.addEventListener('keydown', this.boundOnKeyDown);
 
     // Initial check for onboarding auto-start
@@ -90,6 +93,7 @@ export class FirstNightGuide {
     }
     this.clearHighlightTimers();
     this.bus.off(APP_EVENTS.ROOM_CHANGED, this.boundOnRoomChanged);
+    this.bus.off(APP_EVENTS.IDENTITY_READY, this.boundOnIdentityReady);
     window.removeEventListener('keydown', this.boundOnKeyDown);
     this.close();
   }
@@ -115,7 +119,7 @@ export class FirstNightGuide {
         if (this.retryTimeoutId) clearTimeout(this.retryTimeoutId);
         this.retryTimeoutId = setTimeout(() => this.maybeStart(), 500);
       } else {
-        console.log('[GUIDE] Onboarding startup retries exhausted. Waiting for replay.');
+        devLog('[GUIDE] Onboarding startup retries exhausted. Waiting for replay.');
       }
       return;
     }
@@ -173,6 +177,16 @@ export class FirstNightGuide {
       } catch (e) {}
       this.previousActiveElement = null;
     }
+  }
+
+  private onIdentityReady(): void {
+    // Identity overlay was just dismissed — safe moment to try starting the guide
+    if (this.retryTimeoutId) {
+      clearTimeout(this.retryTimeoutId);
+      this.retryTimeoutId = null;
+    }
+    this.startRetryCount = 0;
+    this.maybeStart();
   }
 
   private onRoomChanged(data: any): void {

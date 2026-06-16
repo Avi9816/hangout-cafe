@@ -39,8 +39,6 @@ export class SharedPresence {
   lastActionTimestamp = 0;
   unsubNotes: Unsubscribe | null = null;
   useSubcollectionNotes = false;
-  unsubObjects: Unsubscribe | null = null;
-  useSubcollectionObjects = false;
   unsubPresence: Unsubscribe | null = null;
   useSubcollectionPresence = false;
   unsubQueue: Unsubscribe | null = null;
@@ -58,21 +56,13 @@ export class SharedPresence {
 
   debouncedSyncNotes = debounceUtil((notes: Note[]) => {
       if(!this.userId || !db || !this.roomCode) return;
-      console.log('[FIRESTORE_ROOM_WRITE] notes sync start:', notes);
+      devLog('[FIRESTORE_ROOM_WRITE] notes sync start, count:', notes.length);
       setDoc(doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode), { notes }, { merge: true })
-        .then(() => console.log('[FIRESTORE_ROOM_WRITE] notes sync SUCCESS'))
+        .then(() => devLog('[FIRESTORE_ROOM_WRITE] notes sync SUCCESS'))
         .catch(err => console.error('[FIRESTORE_ROOM_WRITE] notes sync ERROR:', err));
   }, 500);
 
-  /* debouncedSyncObjects is deprecated
-  debouncedSyncObjects = debounceUtil((objects: MemoryObject[]) => {
-      if(!this.userId || !db || !this.roomCode) return;
-      console.log('[FIRESTORE_ROOM_WRITE] objects sync start:', objects);
-      setDoc(doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode), { objects }, { merge: true })
-        .then(() => console.log('[FIRESTORE_ROOM_WRITE] objects sync SUCCESS'))
-        .catch(err => console.error('[FIRESTORE_ROOM_WRITE] objects sync ERROR:', err));
-  }, 500);
-  */
+
 
   constructor(bus: EventBus) {
     this.bus = bus;
@@ -336,6 +326,7 @@ export class SharedPresence {
         idEl.textContent = `${alias} — ${mood}`;
      }
      $('identity-status')?.classList.add('visible');
+     this.bus.emit(APP_EVENTS.IDENTITY_READY, { profile: this.profile });
      const params = new URLSearchParams(window.location.search);
      const corner = params.get('corner');
      if(corner) this.joinRoom(corner);
@@ -354,7 +345,6 @@ export class SharedPresence {
     
     if (this.unsub) { this.unsub(); this.unsub = null; }
     if (this.unsubNotes) { this.unsubNotes(); this.unsubNotes = null; }
-    if (this.unsubObjects) { this.unsubObjects(); this.unsubObjects = null; }
     if (this.unsubPresence) { this.unsubPresence(); this.unsubPresence = null; }
     if (this.unsubQueue) { this.unsubQueue(); this.unsubQueue = null; }
     if (this.unsubHistory) { this.unsubHistory(); this.unsubHistory = null; }
@@ -497,14 +487,14 @@ export class SharedPresence {
 
   updatePresence() {
     if(!this.userId || !db || !this.profile || !this.roomCode) return;
-    console.log('[FIRESTORE_ROOM_WRITE] updatePresence start for user:', this.userId, 'room:', this.roomCode);
+    devLog('[FIRESTORE_ROOM_WRITE] updatePresence start');
     const activeCount = Object.keys(this.activeUsers).length || 1;
     setDoc(doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode), { 
         presence: { [this.userId]: { alias: this.profile.alias, time: Date.now() } },
         lastActiveAt: Date.now(),
         activeCount: activeCount
     }, { merge: true })
-      .then(() => console.log('[FIRESTORE_ROOM_WRITE] updatePresence SUCCESS'))
+      .then(() => devLog('[FIRESTORE_ROOM_WRITE] updatePresence SUCCESS'))
       .catch(err => console.error('[FIRESTORE_ROOM_WRITE] updatePresence ERROR:', err));
 
     const presDocRef = doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'presence', this.userId);
@@ -519,23 +509,20 @@ export class SharedPresence {
 
   listenToRoom() {
     if(!this.userId || !db || !this.roomCode) {
-      console.log('[DEBUG_LISTEN_ROOM] Skip listen: userId =', this.userId, 'dbExists =', !!db, 'roomCode =', this.roomCode);
+      devLog('[DEBUG_LISTEN_ROOM] Skip listen: dbExists =', !!db);
       return;
     }
     if(this.unsub) { this.unsub(); this.unsub = null; }
     if(this.unsubNotes) { this.unsubNotes(); this.unsubNotes = null; }
-    if(this.unsubObjects) { this.unsubObjects(); this.unsubObjects = null; }
     if(this.unsubPresence) { this.unsubPresence(); this.unsubPresence = null; }
     if(this.unsubPhotos) { this.unsubPhotos(); this.unsubPhotos = null; }
     this.useSubcollectionNotes = false;
-    this.useSubcollectionObjects = false;
     this.useSubcollectionPresence = false;
 
-    const docPath = `artifacts/${this.appId}/public/data/rooms/${this.roomCode}`;
-    console.log('[DEBUG_LISTEN_ROOM] Subscribing to path:', docPath, 'uid:', this.userId, 'room:', this.roomCode);
+    devLog('[DEBUG_LISTEN_ROOM] Subscribing to room path');
 
     this.unsub = onSnapshot(doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode), (snap) => {
-      console.log('[DEBUG_LISTEN_ROOM] Callback fired! path:', docPath, 'exists:', snap.exists());
+      devLog('[DEBUG_LISTEN_ROOM] Callback fired! exists:', snap.exists());
       if(snap.exists()) {
         const data = snap.data();
         this.currentRoomMetadata = {
@@ -575,18 +562,16 @@ export class SharedPresence {
         // Dual-read logic: fallback to legacy array only when subcollection is empty/not active
         if (!this.useSubcollectionNotes) {
             this.notes = data.notes || [];
-            console.log('[DEBUG_LISTEN_ROOM] snap legacy notes.length =', this.notes.length);
-            console.log('[DEBUG_LISTEN_ROOM] Emitting REMOTE_NOTES_UPDATED (legacy)');
+            devLog('[DEBUG_LISTEN_ROOM] snap legacy notes.length =', this.notes.length);
+            devLog('[DEBUG_LISTEN_ROOM] Emitting REMOTE_NOTES_UPDATED (legacy)');
             this.bus.emit(APP_EVENTS.REMOTE_NOTES_UPDATED, this.notes);
         }
 
-        // Dual-read logic: fallback to legacy array only when subcollection is empty/not active
-        if (!this.useSubcollectionObjects) {
-            this.objects = data.objects || [];
-            console.log('[DEBUG_LISTEN_ROOM] snap legacy objects.length =', this.objects.length);
-            console.log('[DEBUG_LISTEN_ROOM] Emitting REMOTE_OBJECTS_UPDATED (legacy)');
-            this.bus.emit(APP_EVENTS.REMOTE_OBJECTS_UPDATED, this.objects);
-        }
+        // Dual-read logic: fallback to legacy array
+        this.objects = data.objects || [];
+        devLog('[DEBUG_LISTEN_ROOM] snap legacy objects.length =', this.objects.length);
+        devLog('[DEBUG_LISTEN_ROOM] Emitting REMOTE_OBJECTS_UPDATED (legacy)');
+        this.bus.emit(APP_EVENTS.REMOTE_OBJECTS_UPDATED, this.objects);
         
         if(data.state && data.state.spotify) this.bus.emit(APP_EVENTS.REMOTE_MEDIA_UPDATED, { type: 'spotify', url: data.state.spotify, host: data.state.spotifyHost });
 
@@ -647,7 +632,7 @@ export class SharedPresence {
     const notesQuery = query(notesCol, orderBy('createdAt', 'desc'), limit(50));
     
     this.unsubNotes = onSnapshot(notesQuery, (subcolSnap) => {
-      console.log('[DEBUG_LISTEN_ROOM] Subcollection notes snapshot fired! empty:', subcolSnap.empty);
+      devLog('[DEBUG_LISTEN_ROOM] Subcollection notes snapshot fired! empty:', subcolSnap.empty);
       if (!subcolSnap.empty) {
         this.useSubcollectionNotes = true;
         this.notes = subcolSnap.docs.map(doc => {
@@ -659,8 +644,8 @@ export class SharedPresence {
                 isEcho: data.isEcho || false
             } as Note;
         });
-        console.log('[DEBUG_LISTEN_ROOM] snap subcol notes.length =', this.notes.length);
-        console.log('[DEBUG_LISTEN_ROOM] Emitting REMOTE_NOTES_UPDATED (subcollection)');
+        devLog('[DEBUG_LISTEN_ROOM] snap subcol notes.length =', this.notes.length);
+        devLog('[DEBUG_LISTEN_ROOM] Emitting REMOTE_NOTES_UPDATED (subcollection)');
         this.bus.emit(APP_EVENTS.REMOTE_NOTES_UPDATED, this.notes);
       } else {
         if (this.useSubcollectionNotes) {
@@ -672,41 +657,11 @@ export class SharedPresence {
       console.error('[DEBUG_LISTEN_ROOM] Subcollection notes snapshot error:', err);
     });
 
-    /* objects subcollection listener is deprecated
-    const objectsCol = collection(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'objects');
-    const objectsQuery = query(objectsCol, orderBy('createdAt', 'desc'), limit(20));
-    
-    this.unsubObjects = onSnapshot(objectsQuery, (subcolSnap) => {
-      console.log('[DEBUG_LISTEN_ROOM] Subcollection objects snapshot fired! empty:', subcolSnap.empty);
-      if (!subcolSnap.empty) {
-        this.useSubcollectionObjects = true;
-        this.objects = subcolSnap.docs.map(doc => {
-            const data = doc.data();
-            return {
-                emoji: data.emoji || '',
-                label: data.label || '',
-                author: data.author || 'wanderer',
-                id: data.id || 0,
-                isMythic: data.isMythic || false
-            } as MemoryObject;
-        });
-        console.log('[DEBUG_LISTEN_ROOM] snap subcol objects.length =', this.objects.length);
-        console.log('[DEBUG_LISTEN_ROOM] Emitting REMOTE_OBJECTS_UPDATED (subcollection)');
-        this.bus.emit(APP_EVENTS.REMOTE_OBJECTS_UPDATED, this.objects);
-      } else {
-        if (this.useSubcollectionObjects) {
-            this.objects = [];
-            this.bus.emit(APP_EVENTS.REMOTE_OBJECTS_UPDATED, this.objects);
-        }
-      }
-    }, (err) => {
-      console.error('[DEBUG_LISTEN_ROOM] Subcollection objects snapshot error:', err);
-    });
-    */
+
 
     const presenceCol = collection(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'presence');
     this.unsubPresence = onSnapshot(presenceCol, (subcolSnap) => {
-      console.log('[DEBUG_LISTEN_ROOM] Subcollection presence snapshot fired! empty:', subcolSnap.empty);
+      devLog('[DEBUG_LISTEN_ROOM] Subcollection presence snapshot fired! empty:', subcolSnap.empty);
       if (!subcolSnap.empty) {
         this.useSubcollectionPresence = true;
         const now = Date.now();
