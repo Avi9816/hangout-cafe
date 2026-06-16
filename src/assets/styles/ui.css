@@ -710,8 +710,11 @@ h2 { font-family: var(--font-ui); font-size: clamp(1.8rem, 6vw, 2.2rem); font-we
 #room-view {
   position: relative;
   z-index: 2;
-  width: min(640px, calc(100vw - 32px));
+  width: 100%;
+  max-width: 1180px;
   margin: 0 auto 96px;
+  padding: 0 16px;
+  box-sizing: border-box;
   background: transparent;
   border: none;
   box-shadow: none;
@@ -720,6 +723,18 @@ h2 { font-family: var(--font-ui); font-size: clamp(1.8rem, 6vw, 2.2rem); font-we
   /* subtle per-theme composition offset */
   transform: var(--room-view-transform, translateX(0px));
   transition: transform 0.5s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+@media (min-width: 768px) {
+  #room-view {
+    padding: 0 24px;
+  }
+}
+
+@media (min-width: 1100px) {
+  #room-view {
+    padding: 0 32px;
+  }
 }
 
 /* Phase 3: Room hero — the branded panel at the top of a room */
@@ -771,15 +786,61 @@ h2 { font-family: var(--font-ui); font-size: clamp(1.8rem, 6vw, 2.2rem); font-we
   transition: all 0.4s ease;
 }
 
+/* Room Main Grid for Mobile & Tablet */
+.room-main-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+  box-sizing: border-box;
+}
 
-/* Phase 2/3 mobile: reset composition offset, restore centered layout */
-@media (max-width: 900px) {
+@media (max-width: 1099px) {
   #room-view {
     transform: none !important;
-    width: 100% !important;
   }
+}
+
+@media (max-width: 767px) {
   .room-hero, .room-section {
     padding: 24px 20px;
+  }
+}
+
+/* Room Main Grid for Desktop */
+@media (min-width: 1100px) {
+  .room-main-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(340px, 0.85fr);
+    grid-template-areas:
+      "media memory"
+      "notes memory"
+      "photos memory";
+    gap: 28px;
+    align-items: start;
+  }
+
+  #media-module {
+    grid-area: media;
+    margin-top: 20px;
+  }
+
+  #note-wall-section {
+    grid-area: notes;
+    margin-top: 0;
+  }
+
+  #photo-wall-section {
+    grid-area: photos;
+    margin-top: 0;
+  }
+
+  #room-memory-section {
+    grid-area: memory;
+    margin-top: 20px;
+    position: sticky;
+    top: 24px;
+    align-self: start;
   }
 }
 
@@ -1034,14 +1095,39 @@ h2 { font-family: var(--font-ui); font-size: clamp(1.8rem, 6vw, 2.2rem); font-we
   width: 100%;
 }
 
-.room-memory-subsection {
+.room-memory-section > div,
+.room-memory-section > section {
   width: 100%;
   margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
   box-sizing: border-box;
 }
 
-#room-history-subsection {
+.room-memory-section > :first-child {
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+  border-top: none !important;
+}
+
+/* Room Subsection Styling */
+.room-subsection-heading {
+  font-family: var(--font-ui);
+  font-size: 1.15rem;
+  font-weight: 500;
+  color: #fff;
+  letter-spacing: 0.3px;
   margin-top: 0;
+  margin-bottom: 4px;
+}
+
+.room-memory-section .subtitle {
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  opacity: 0.7;
+  line-height: 1.4;
+  margin-bottom: 20px;
 }
 
 .room-memory-card {
@@ -1059,9 +1145,6 @@ h2 { font-family: var(--font-ui); font-size: clamp(1.8rem, 6vw, 2.2rem); font-we
 
 .future-whispers-section {
   width: 100%;
-  margin-top: 28px;
-  padding-top: 24px;
-  border-top: 1px solid rgba(232, 218, 196, 0.08);
   box-sizing: border-box;
 }
 

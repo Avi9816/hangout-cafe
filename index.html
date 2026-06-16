@@ -129,7 +129,6 @@
     </section>
     <div id="first-night-guide-container"></div>
   </div>
-
   <div id="room-view" class="view-transition view-hidden">
 
     <!-- ROOM HERO — has the panel style, not the full room-view -->
@@ -140,168 +139,158 @@
       <div class="room-presence-list" id="room-presence-list" aria-live="polite"></div>
       <div class="room-hero-actions">
         <button class="text-btn" id="btn-invite" style="display: none;" aria-label="Copy invitation link">invite someone into this corner</button>
-        <button class="text-btn" id="btn-leave-private" style="display: none; margin-left: 20px; opacity: 0.3;" aria-label="Leave private room">step back outside</button>
+        <button class="text-btn" id="btn-leave-private" style="margin-left: 20px; opacity: 0.3; display: none;" aria-label="Leave private room">step back outside</button>
       </div>
     </div>
 
-    <!-- SHARED MEDIA -->
-    <section class="room-section" id="media-module" aria-label="Shared Media Player">
-      <h2 class="section-heading">Shared Media</h2>
-      <p class="subtitle" style="margin-bottom: 24px;">share a melody or a vision with the room</p>
-      
-      <div class="media-card">
-        <nav class="media-tabs" role="tablist">
-          <button class="media-tab active" data-tab="spotify" role="tab" aria-selected="true">Spotify</button>
-          <button class="media-tab" data-tab="youtube" role="tab" aria-selected="false">YouTube</button>
-          <button class="media-tab" data-tab="vhs" role="tab" aria-selected="false">VHS</button>
-        </nav>
+    <!-- MAIN GRID CONTAINER -->
+    <div class="room-main-grid">
 
-        <div class="media-panes">
-          <!-- Spotify Pane -->
-          <div class="media-pane active" id="pane-spotify" role="tabpanel">
-            <div class="host-label" id="spotify-host" aria-live="polite"></div>
-            <div class="media-input-group">
-              <input type="url" id="spotify-input" class="ethereal-input" placeholder="whisper a spotify link..." aria-label="Spotify URL">
-              <button class="text-btn" id="btn-play-spotify">drop the needle</button>
-            </div>
-            <div id="spotify-container" class="ambient-embed"></div>
-          </div>
+      <!-- SHARED MEDIA -->
+      <section class="room-section" id="media-module" aria-label="Shared Media Player">
+        <h2 class="section-heading">Shared Media</h2>
+        <p class="subtitle" style="margin-bottom: 24px;">share a melody or a vision with the room</p>
+        
+        <div class="media-card">
+          <nav class="media-tabs" role="tablist">
+            <button class="media-tab active" data-tab="spotify" role="tab" aria-selected="true">Spotify</button>
+            <button class="media-tab" data-tab="youtube" role="tab" aria-selected="false">YouTube</button>
+            <button class="media-tab" data-tab="vhs" role="tab" aria-selected="false">VHS</button>
+          </nav>
 
-          <!-- YouTube Pane -->
-          <div class="media-pane" id="pane-youtube" role="tabpanel">
-            <div class="host-label" id="youtube-host" aria-live="polite"></div>
-            <div class="media-input-group">
-              <input type="url" id="youtube-input" class="ethereal-input" placeholder="whisper a youtube link..." aria-label="YouTube URL">
-              <button class="text-btn" id="btn-play-youtube">turn on the projector</button>
-            </div>
-            <div id="youtube-container" class="ambient-embed">
-              <div id="yt-player-target"></div>
-            </div>
-          </div>
-
-          <!-- VHS Pane -->
-          <div class="media-pane" id="pane-vhs" role="tabpanel">
-            <div class="host-label" id="local-host" aria-live="polite"></div>
-            <div class="media-input-group">
-              <input type="file" id="local-movie-input" accept="video/mp4,video/webm,video/ogg" style="display:none;" aria-label="Select local video file">
-              <button class="text-btn" id="btn-select-movie">insert tape (select file)</button>
-              <button class="text-btn" id="btn-skip-tape" style="display:none; color: var(--accent); margin-left: 12px;">skip tape</button>
-            </div>
-            <div id="wt-status" class="vhs-status" aria-live="polite"></div>
-            <div id="local-video-container" class="ambient-embed"></div>
-            <div id="vhs-queue-section" style="margin-top: 24px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 16px;">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
-                <h4 style="opacity: 0.8; margin-bottom: 0; font-family: var(--font-ui); font-size: 0.85rem; letter-spacing: 1px; text-transform: uppercase;">Tape Queue</h4>
-                <span id="queue-host-info" style="font-size: 0.7rem; font-family: var(--font-ui); color: var(--accent); padding: 2px 8px; background: rgba(201,130,69,0.1); border: 1px solid rgba(201,130,69,0.2); border-radius: 10px; font-weight: 500; text-transform: lowercase;">host: none</span>
+          <div class="media-panes">
+            <!-- Spotify Pane -->
+            <div class="media-pane active" id="pane-spotify" role="tabpanel">
+              <div class="host-label" id="spotify-host" aria-live="polite"></div>
+              <div class="media-input-group">
+                <input type="url" id="spotify-input" class="ethereal-input" placeholder="whisper a spotify link..." aria-label="Spotify URL">
+                <button class="text-btn" id="btn-play-spotify">drop the needle</button>
               </div>
-              <div id="queue-viewer-status" style="font-size: 0.75rem; font-family: var(--font-ui); opacity: 0.5; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; text-transform: lowercase;">
-                <span class="icon-label" style="opacity: 0.8; font-size: 0.75rem;">
-                  <svg class="hc-icon hc-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width: 14px; height: 14px;">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                    <circle cx="12" cy="12" r="3" />
-                  </svg>
-                  <span>viewing room (read-only)</span>
-                </span>
+              <div id="spotify-container" class="ambient-embed"></div>
+            </div>
+
+            <!-- YouTube Pane -->
+            <div class="media-pane" id="pane-youtube" role="tabpanel">
+              <div class="host-label" id="youtube-host" aria-live="polite"></div>
+              <div class="media-input-group">
+                <input type="url" id="youtube-input" class="ethereal-input" placeholder="whisper a youtube link..." aria-label="YouTube URL">
+                <button class="text-btn" id="btn-play-youtube">turn on the projector</button>
               </div>
-              <div id="queue-control-message" style="font-size: 0.7rem; font-family: var(--font-ui); font-style: italic; opacity: 0.4; margin-bottom: 12px; text-transform: lowercase; line-height: 1.4;"></div>
-              <div id="vhs-queue-list" style="display: flex; flex-direction: column; gap: 8px;"></div>
+              <div id="youtube-container" class="ambient-embed">
+                <div id="yt-player-target"></div>
+              </div>
+            </div>
+
+            <!-- VHS Pane -->
+            <div class="media-pane" id="pane-vhs" role="tabpanel">
+              <div class="host-label" id="local-host" aria-live="polite"></div>
+              <div class="media-input-group">
+                <input type="file" id="local-movie-input" accept="video/mp4,video/webm,video/ogg" style="display:none;" aria-label="Select local video file">
+                <button class="text-btn" id="btn-select-movie">insert tape (select file)</button>
+                <button class="text-btn" id="btn-skip-tape" style="display:none; color: var(--accent); margin-left: 12px;">skip tape</button>
+              </div>
+              <div id="wt-status" class="vhs-status" aria-live="polite"></div>
+              <div id="local-video-container" class="ambient-embed"></div>
+              <div id="vhs-queue-section" style="margin-top: 24px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+                  <h4 style="opacity: 0.8; margin-bottom: 0; font-family: var(--font-ui); font-size: 0.85rem; letter-spacing: 1px; text-transform: uppercase;">Tape Queue</h4>
+                  <span id="queue-host-info" style="font-size: 0.7rem; font-family: var(--font-ui); color: var(--accent); padding: 2px 8px; background: rgba(201,130,69,0.1); border: 1px solid rgba(201,130,69,0.2); border-radius: 10px; font-weight: 500; text-transform: lowercase;">host: none</span>
+                </div>
+                <div id="queue-viewer-status" style="font-size: 0.75rem; font-family: var(--font-ui); opacity: 0.5; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; text-transform: lowercase;">
+                  <span class="icon-label" style="opacity: 0.8; font-size: 0.75rem;">
+                    <svg class="hc-icon hc-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width: 14px; height: 14px;">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                    <span>viewing room (read-only)</span>
+                  </span>
+                </div>
+                <div id="queue-control-message" style="font-size: 0.7rem; font-family: var(--font-ui); font-style: italic; opacity: 0.4; margin-bottom: 12px; text-transform: lowercase; line-height: 1.4;"></div>
+                <div id="vhs-queue-list" style="display: flex; flex-direction: column; gap: 8px;"></div>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-    </section>
-
-    <!-- THE TABLE — Soft-removed
-    <section class="room-section" id="table-section" style="display: none;" aria-label="Memory Table">
-      <h2 class="section-heading">The Table</h2>
-      <p class="subtitle">leave a tiny piece of yourself here.</p>
-      
-      <nav class="object-menu" aria-label="Object Selection">
-        <button class="table-obj-btn" data-obj="coffee">warm coffee</button>
-        <button class="table-obj-btn" data-obj="book">open book</button>
-        <button class="table-obj-btn" data-obj="polaroid">forgotten polaroid</button>
-        <button class="table-obj-btn" data-obj="lamp">small lamp</button>
-      </nav>
-      <div id="memory-table" aria-live="polite"></div>
-    </section>
-    -->
-
-    <!-- THE WALL -->
-    <section class="room-section" aria-label="Memory Wall">
-      <h2 class="section-heading">The Wall</h2>
-      <p class="subtitle" style="margin-bottom: 40px;">leave a memory, a thought, or a goodbye.</p>
-      <input type="text" id="note-input" class="ethereal-input" placeholder="whisper a midnight thought..." maxlength="120" style="margin-bottom: 24px;" aria-label="Your thought">
-      <button class="text-btn" id="btn-post-note">pin to the wall</button>
-      <div id="the-wall" aria-live="polite"></div>
-    </section>
-
-    <!-- ROOM MEMORY -->
-    <section class="room-section room-memory-section" id="room-memory-section" aria-label="Room Activity and Memories">
-      <!-- Persistent Memories -->
-      <div class="room-memory-subsection" id="room-memories-subsection">
-        <h2 class="section-heading" style="font-size: 1.4rem; margin-bottom: 8px;">This room remembers...</h2>
-        <p class="subtitle" style="margin-bottom: 24px; font-size: 0.9rem;">Pinned memories from previous visits</p>
-        <div id="last-tape-played" style="margin-bottom: 16px; font-size: 0.85rem; opacity: 0.8; font-style: italic; color: var(--accent); display: none;"></div>
-        <div id="room-memories-list" style="display: flex; flex-direction: column; gap: 10px; max-height: 300px; overflow-y: auto; padding: 12px; background: rgba(0,0,0,0.15); border-radius: 6px; border: 1px solid var(--border-soft);"></div>
-      </div>
-
-      <!-- Future Whispers -->
-      <section class="future-whispers-section" id="future-whispers-section">
-        <div class="section-heading" style="text-align: left; margin-bottom: 0;">
-          <h3 style="font-size: 1.25rem; margin-bottom: 4px; font-weight: 600; color: #fff; font-family: var(--font-ui);">Future Whispers</h3>
-          <p class="subtitle" style="font-size: 0.85rem; opacity: 0.7; line-height: 1.4; margin-bottom: 12px;">Leave a quiet message for whoever finds this room later.</p>
-        </div>
-
-        <div class="future-whisper-form">
-          <textarea id="whisper-input" class="ethereal-input" placeholder="Leave something gentle for the next visitor…" maxlength="180" style="text-align: left; font-weight: 300; letter-spacing: 0.5px; padding: 10px 14px;"></textarea>
-
-          <div class="whisper-actions-row">
-            <button class="text-btn" id="btn-leave-whisper" style="margin: 0; padding: 6px 16px; font-size: 0.85rem; border: 1px solid var(--accent); background: rgba(201,130,69,0.08); color: var(--accent); font-weight: 700; text-transform: lowercase; border-radius: 4px;">Leave whisper</button>
-            <span id="whisper-char-count">0 / 180</span>
-          </div>
-
-          <div id="whisper-error" style="color: var(--accent); font-size: 0.75rem; display: none; margin-top: 8px; font-family: var(--font-ui);"></div>
-          <div id="whisper-success" style="color: #4ade80; font-size: 0.75rem; display: none; margin-top: 8px; font-family: var(--font-ui);"></div>
-        </div>
-
-        <div id="room-whispers-list"></div>
       </section>
 
-      <!-- Room Echoes -->
-      <div class="room-memory-subsection" id="room-echoes-subsection">
-        <h2 class="section-heading" style="font-size: 1.4rem; margin-bottom: 8px;">Room Echoes</h2>
-        <p class="subtitle" style="margin-bottom: 24px; font-size: 0.9rem;">Small traces from earlier visits.</p>
-        <div id="room-echoes-list" class="room-echoes-list"></div>
-      </div>
+      <!-- THE WALL -->
+      <section class="room-section" id="note-wall-section" aria-label="Memory Wall">
+        <h2 class="section-heading">The Wall</h2>
+        <p class="subtitle" style="margin-bottom: 40px;">leave a memory, a thought, or a goodbye.</p>
+        <input type="text" id="note-input" class="ethereal-input" placeholder="whisper a midnight thought..." maxlength="120" style="margin-bottom: 24px;" aria-label="Your thought">
+        <button class="text-btn" id="btn-post-note">pin to the wall</button>
+        <div id="the-wall" aria-live="polite"></div>
+      </section>
 
-      <!-- Recent Room Activity -->
-      <div class="room-memory-subsection" id="room-history-subsection">
-        <h2 class="section-heading" style="font-size: 1.4rem; margin-bottom: 8px;">Recently left behind</h2>
-        <p class="subtitle" style="margin-bottom: 24px; font-size: 0.9rem;">Chronological ambient activities</p>
-        <div id="room-history-list" style="display: flex; flex-direction: column; gap: 10px; max-height: 300px; overflow-y: auto; padding: 12px; background: rgba(0,0,0,0.15); border-radius: 6px; border: 1px solid var(--border-soft);"></div>
-      </div>
-    </section>
-
-    <!-- PHOTO WALL -->
-    <section class="room-section" id="photo-wall-section" aria-label="Photo Wall">
-      <h2 class="section-heading">Old photographs left behind</h2>
-      <p class="subtitle" style="margin-bottom: 32px;">polaroids pinned to the corkboard</p>
-      
-      <!-- Upload Controller -->
-      <div class="photo-upload-panel">
-        <div style="display: flex; gap: 12px; align-items: center; justify-content: space-between;">
-          <input type="file" id="photo-file-input" accept="image/*" style="display: none;" aria-label="Choose Polaroid Photo">
-          <button class="text-btn" id="btn-select-photo" style="margin: 0; padding: 8px 16px; border: 1px solid rgba(255,255,255,0.15); border-radius: 4px; background: rgba(255,255,255,0.02); font-weight: 500; font-size: 0.8rem; text-transform: lowercase;">choose photo</button>
-          <span id="selected-photo-name" style="font-size: 0.75rem; opacity: 0.5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; font-family: var(--font-ui);">no file chosen</span>
+      <!-- ROOM MEMORY -->
+      <section class="room-section room-memory-section" id="room-memory-section" aria-label="Room Activity and Memories">
+        <!-- Persistent Memories -->
+        <div class="room-memory-subsection" id="room-memories-subsection">
+          <h3 class="room-subsection-heading">This room remembers...</h3>
+          <p class="subtitle">Pinned memories from previous visits</p>
+          <div id="last-tape-played" style="margin-bottom: 16px; font-size: 0.85rem; opacity: 0.8; font-style: italic; color: var(--accent); display: none;"></div>
+          <div id="room-memories-list" style="display: flex; flex-direction: column; gap: 10px; max-height: 300px; overflow-y: auto; padding: 12px; background: rgba(0,0,0,0.15); border-radius: 6px; border: 1px solid var(--border-soft);"></div>
         </div>
-        <input type="text" id="photo-caption-input" class="ethereal-input" placeholder="write a short caption..." maxlength="80" aria-label="Photo caption" style="padding: 10px; font-size: 0.85rem; border-radius: 4px; text-align: left; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08);">
-        <button class="text-btn" id="btn-upload-photo" style="margin: 0; width: 100%; padding: 10px; border: 1px solid var(--accent); border-radius: 4px; background: rgba(201,130,69,0.08); color: var(--accent); font-weight: 700; text-transform: lowercase; font-size: 0.85rem;">pin photo</button>
-        <div id="photo-upload-error" style="color: var(--accent); font-size: 0.75rem; display: none; margin-top: 4px; line-height: 1.4; font-family: var(--font-ui);"></div>
-      </div>
 
-      <!-- Photo Grid -->
-      <div id="photo-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 28px; justify-items: center; align-items: start; margin-top: 24px;" aria-live="polite"></div>
-    </section>
+        <!-- Future Whispers -->
+        <section class="future-whispers-section" id="future-whispers-section">
+          <div style="text-align: left; margin-bottom: 0;">
+            <h3 class="room-subsection-heading">Future Whispers</h3>
+            <p class="subtitle">Leave a quiet message for whoever finds this room later.</p>
+          </div>
+
+          <div class="future-whisper-form">
+            <textarea id="whisper-input" class="ethereal-input" placeholder="Leave something gentle for the next visitor…" maxlength="180" style="text-align: left; font-weight: 300; letter-spacing: 0.5px; padding: 10px 14px;"></textarea>
+
+            <div class="whisper-actions-row">
+              <button class="text-btn" id="btn-leave-whisper" style="margin: 0; padding: 6px 16px; font-size: 0.85rem; border: 1px solid var(--accent); background: rgba(201,130,69,0.08); color: var(--accent); font-weight: 700; text-transform: lowercase; border-radius: 4px;">Leave whisper</button>
+              <span id="whisper-char-count">0 / 180</span>
+            </div>
+
+            <div id="whisper-error" style="color: var(--accent); font-size: 0.75rem; display: none; margin-top: 8px; font-family: var(--font-ui);"></div>
+            <div id="whisper-success" style="color: #4ade80; font-size: 0.75rem; display: none; margin-top: 8px; font-family: var(--font-ui);"></div>
+          </div>
+
+          <div id="room-whispers-list"></div>
+        </section>
+
+        <!-- Room Echoes -->
+        <div class="room-memory-subsection" id="room-echoes-subsection">
+          <h3 class="room-subsection-heading">Room Echoes</h3>
+          <p class="subtitle">Small traces from earlier visits.</p>
+          <div id="room-echoes-list" class="room-echoes-list"></div>
+        </div>
+
+        <!-- Recent Room Activity -->
+        <div class="room-memory-subsection" id="room-history-subsection">
+          <h3 class="room-subsection-heading">Recently left behind</h3>
+          <p class="subtitle">Chronological ambient activities</p>
+          <div id="room-history-list" style="display: flex; flex-direction: column; gap: 10px; max-height: 300px; overflow-y: auto; padding: 12px; background: rgba(0,0,0,0.15); border-radius: 6px; border: 1px solid var(--border-soft);"></div>
+        </div>
+      </section>
+
+      <!-- PHOTO WALL -->
+      <section class="room-section" id="photo-wall-section" aria-label="Photo Wall">
+        <h2 class="section-heading">Old photographs left behind</h2>
+        <p class="subtitle" style="margin-bottom: 32px;">polaroids pinned to the corkboard</p>
+        
+        <!-- Upload Controller -->
+        <div class="photo-upload-panel">
+          <div style="display: flex; gap: 12px; align-items: center; justify-content: space-between;">
+            <input type="file" id="photo-file-input" accept="image/*" style="display: none;" aria-label="Choose Polaroid Photo">
+            <button class="text-btn" id="btn-select-photo" style="margin: 0; padding: 8px 16px; border: 1px solid rgba(255,255,255,0.15); border-radius: 4px; background: rgba(255,255,255,0.02); font-weight: 500; font-size: 0.8rem; text-transform: lowercase;">choose photo</button>
+            <span id="selected-photo-name" style="font-size: 0.75rem; opacity: 0.5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; font-family: var(--font-ui);">no file chosen</span>
+          </div>
+          <input type="text" id="photo-caption-input" class="ethereal-input" placeholder="write a short caption..." maxlength="80" aria-label="Photo caption" style="padding: 10px; font-size: 0.85rem; border-radius: 4px; text-align: left; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08);">
+          <button class="text-btn" id="btn-upload-photo" style="margin: 0; width: 100%; padding: 10px; border: 1px solid var(--accent); border-radius: 4px; background: rgba(201,130,69,0.08); color: var(--accent); font-weight: 700; text-transform: lowercase; font-size: 0.85rem;">pin photo</button>
+          <div id="photo-upload-error" style="color: var(--accent); font-size: 0.75rem; display: none; margin-top: 4px; line-height: 1.4; font-family: var(--font-ui);"></div>
+        </div>
+
+        <!-- Photo Grid -->
+        <div id="photo-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 28px; justify-items: center; align-items: start; margin-top: 24px;" aria-live="polite"></div>
+      </section>
+
+    </div>
   </div>
 
 
