@@ -70,8 +70,8 @@ async function runVerification() {
   await sleep(1500);
 
   // Verify step 2 scroll and highlights
-  console.log("Taking screenshot: guide-step-2-highlight.png");
-  await page.screenshot({ path: OUT_DIR + 'guide-step-2-highlight.png' });
+  console.log("Taking screenshot: guide-step-2-after-scroll-highlight.png");
+  await page.screenshot({ path: OUT_DIR + 'guide-step-2-after-scroll-highlight.png' });
 
   // Click next to Step 3
   console.log("Advancing to Step 3...");
@@ -79,8 +79,8 @@ async function runVerification() {
   await sleep(1500);
 
   // Verify step 3 copy and removed highlights
-  console.log("Taking screenshot: guide-step-3.png");
-  await page.screenshot({ path: OUT_DIR + 'guide-step-3.png' });
+  console.log("Taking screenshot: guide-step-3-no-stale-highlight.png");
+  await page.screenshot({ path: OUT_DIR + 'guide-step-3-no-stale-highlight.png' });
 
   // Click next to Step 4
   console.log("Advancing to Step 4...");
@@ -88,8 +88,8 @@ async function runVerification() {
   await sleep(1500);
 
   // Verify step 4
-  console.log("Taking screenshot: guide-step-4.png");
-  await page.screenshot({ path: OUT_DIR + 'guide-step-4.png' });
+  console.log("Taking screenshot: guide-step-4-complete.png");
+  await page.screenshot({ path: OUT_DIR + 'guide-step-4-complete.png' });
 
   // Click complete
   console.log("Completing guide...");
@@ -182,8 +182,8 @@ async function runVerification() {
   await page.click('#btn-guide-next');
   await sleep(1500);
 
-  console.log("Taking screenshot: mobile-guide-step-2-highlight.png");
-  await page.screenshot({ path: OUT_DIR + 'mobile-guide-step-2-highlight.png' });
+  console.log("Taking screenshot: mobile-guide-step-2-after-scroll.png");
+  await page.screenshot({ path: OUT_DIR + 'mobile-guide-step-2-after-scroll.png' });
 
   console.log("All verification screenshots taken successfully.");
   await browser.close();

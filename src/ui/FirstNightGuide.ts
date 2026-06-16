@@ -56,6 +56,10 @@ export class FirstNightGuide {
   private retryTimeoutId: any = null;
   private previousActiveElement: HTMLElement | null = null;
 
+  // Track the current step index and active highlight timers
+  private currentStepIndex = 0;
+  private highlightTimeoutId: any = null;
+
   private boundOnRoomChanged = this.onRoomChanged.bind(this);
   private boundOnKeyDown = this.onKeyDown.bind(this);
 
@@ -84,6 +88,7 @@ export class FirstNightGuide {
       clearTimeout(this.retryTimeoutId);
       this.retryTimeoutId = null;
     }
+    this.clearHighlightTimers();
     this.bus.off(APP_EVENTS.ROOM_CHANGED, this.boundOnRoomChanged);
     window.removeEventListener('keydown', this.boundOnKeyDown);
     this.close();
@@ -128,18 +133,21 @@ export class FirstNightGuide {
   }
 
   complete(): void {
+    this.clearHighlightTimers();
     localStorage.setItem(LOCAL_STORAGE_KEY, GUIDE_VERSION);
     this.bus.emit(APP_EVENTS.GUIDE_COMPLETED as any);
     this.close();
   }
 
   skip(): void {
+    this.clearHighlightTimers();
     localStorage.setItem(LOCAL_STORAGE_KEY, GUIDE_VERSION);
     this.bus.emit(APP_EVENTS.GUIDE_SKIPPED as any);
     this.close();
   }
 
   reset(): void {
+    this.clearHighlightTimers();
     localStorage.removeItem(LOCAL_STORAGE_KEY);
     this.startRetryCount = 0;
     if (this.retryTimeoutId) {
@@ -151,6 +159,7 @@ export class FirstNightGuide {
 
   private close(): void {
     this.isOpen = false;
+    this.clearHighlightTimers();
     this.removeHighlights();
 
     const container = $('first-night-guide-container');
@@ -182,6 +191,79 @@ export class FirstNightGuide {
     }
   }
 
+  private clearHighlightTimers(): void {
+    if (this.highlightTimeoutId) {
+      clearTimeout(this.highlightTimeoutId);
+      this.highlightTimeoutId = null;
+    }
+  }
+
+  private scrollToGuideTarget(selector: string | null): Promise<void> {
+    if (!selector) return Promise.resolve();
+    try {
+      const target = document.querySelector(selector) as HTMLElement;
+      if (!target) return Promise.resolve();
+
+      const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const isMobile = window.matchMedia('(max-width: 768px)').matches;
+
+      target.scrollIntoView({
+        behavior: prefersReducedMotion ? 'auto' : 'smooth',
+        block: isMobile ? 'start' : 'center',
+        inline: 'nearest'
+      });
+    } catch (e) {
+      console.error(`[GUIDE] Error scrolling to target: ${selector}`, e);
+    }
+    return Promise.resolve();
+  }
+
+  private waitForScrollThenHighlight(stepIndex: number, scrollTargetSelector: string | null, highlightSelectors: string[]): void {
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    
+    let applied = false;
+    const applyOnce = () => {
+      if (applied) return;
+      applied = true;
+
+      this.clearHighlightTimers();
+      window.removeEventListener('scrollend', scrollEndHandler, { capture: true });
+      document.removeEventListener('scrollend', scrollEndHandler, { capture: true });
+
+      // Ensure guide is still active, step matches, and wasn't skipped/destroyed in between
+      if (!this.isOpen || this.currentStepIndex !== stepIndex) return;
+
+      if (highlightSelectors && highlightSelectors.length > 0) {
+        this.applyHighlights(highlightSelectors);
+      }
+
+      // Focus guide primary action button safely after layout transition
+      const nextBtn = $('btn-guide-next');
+      if (nextBtn) {
+        nextBtn.focus({ preventScroll: true });
+      }
+    };
+
+    const scrollEndHandler = () => {
+      applyOnce();
+    };
+
+    // If reduced-motion is active or no target is configured, apply and focus immediately
+    if (prefersReducedMotion || !scrollTargetSelector) {
+      applyOnce();
+      return;
+    }
+
+    // Otherwise, listen for standard scrollend event to handle transitions natively
+    window.addEventListener('scrollend', scrollEndHandler, { capture: true, once: true });
+    document.addEventListener('scrollend', scrollEndHandler, { capture: true, once: true });
+
+    // Enforce 500ms safety timeout fallback for legacy/non-conforming viewports
+    this.highlightTimeoutId = setTimeout(() => {
+      applyOnce();
+    }, 500);
+  }
+
   private renderStep(stepIndex: number): void {
     this.bus.emit(APP_EVENTS.GUIDE_STEP_CHANGED as any, stepIndex);
 
@@ -189,28 +271,11 @@ export class FirstNightGuide {
     if (!container) return;
 
     this.removeHighlights();
+    this.clearHighlightTimers();
+    this.currentStepIndex = stepIndex;
 
     const step = GUIDE_CONFIG[stepIndex];
     if (!step) return;
-
-    // Scroll to target if specified in step config
-    if (step.scrollTargetSelector) {
-      try {
-        const target = document.querySelector(step.scrollTargetSelector);
-        if (target) {
-          const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-          const isMobile = window.innerWidth <= 600;
-          const block = isMobile ? 'start' : 'center';
-          const behavior = prefersReducedMotion ? 'auto' : 'smooth';
-
-          target.scrollIntoView({ behavior, block });
-        } else {
-          console.warn(`[GUIDE] Scroll target element not found: ${step.scrollTargetSelector}. Skipping scroll safely.`);
-        }
-      } catch (e) {
-        console.error(`[GUIDE] Error scrolling to target: ${step.scrollTargetSelector}`, e);
-      }
-    }
 
     container.innerHTML = `
       <div class="guide-card" role="dialog" aria-modal="true" aria-labelledby="guide-title">
@@ -227,18 +292,12 @@ export class FirstNightGuide {
       </div>
     `;
 
-    // Apply highlights specified in the config step
-    if (step.highlightSelectors) {
-      this.applyHighlights(step.highlightSelectors);
-    }
-
     // Set up button event listeners
     const nextBtn = $('btn-guide-next');
     const skipBtn = $('btn-guide-skip');
     const closeBtn = $('btn-guide-close');
 
     if (nextBtn) {
-      nextBtn.focus();
       nextBtn.addEventListener('click', () => {
         this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'soft_click');
         if (stepIndex === GUIDE_CONFIG.length - 1) {
@@ -262,6 +321,11 @@ export class FirstNightGuide {
         this.skip();
       });
     }
+
+    // Scroll to section target first, then deferred highlight application
+    this.scrollToGuideTarget(step.scrollTargetSelector).then(() => {
+      this.waitForScrollThenHighlight(stepIndex, step.scrollTargetSelector, step.highlightSelectors);
+    });
   }
 
   private applyHighlights(selectors: string[]): void {

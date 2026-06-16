@@ -943,6 +943,12 @@ h2 { font-family: var(--font-ui); font-size: clamp(1.8rem, 6vw, 2.2rem); font-we
   }
 }
 
+#destinations,
+#private-room-section {
+  scroll-margin-top: 96px;
+  scroll-margin-bottom: 240px;
+}
+
 
 
 
