@@ -64,6 +64,7 @@ export class SharedPresence {
         .catch(err => console.error('[FIRESTORE_ROOM_WRITE] notes sync ERROR:', err));
   }, 500);
 
+  /* debouncedSyncObjects is deprecated
   debouncedSyncObjects = debounceUtil((objects: MemoryObject[]) => {
       if(!this.userId || !db || !this.roomCode) return;
       console.log('[FIRESTORE_ROOM_WRITE] objects sync start:', objects);
@@ -71,6 +72,7 @@ export class SharedPresence {
         .then(() => console.log('[FIRESTORE_ROOM_WRITE] objects sync SUCCESS'))
         .catch(err => console.error('[FIRESTORE_ROOM_WRITE] objects sync ERROR:', err));
   }, 500);
+  */
 
   constructor(bus: EventBus) {
     this.bus = bus;
@@ -116,26 +118,12 @@ export class SharedPresence {
     });
 
     this.bus.on(APP_EVENTS.OBJECT_PLACED, (obj: MemoryObject) => {
-        if(this.profile) obj.author = this.profile.alias;
-        this.objects.unshift(obj);
-        if(this.objects.length > 20) this.objects.pop();
-        this.debouncedSyncObjects(this.objects);
-        this.broadcastActivity(`${this.profile?.alias || 'wanderer'} placed a ${obj.label}`, obj.emoji);
-
-        const alias = this.profile?.alias || 'wanderer';
+        console.warn('[DEPRECATED] OBJECT_PLACED received. Table objects feature is removed. No database writes performed.');
+        if (this.profile) obj.author = this.profile.alias;
+        
+        // Still log history event for backward/test compatibility
+        const alias = (this.profile?.alias && this.profile.alias.toLowerCase() !== 'wanderer') ? this.profile.alias : 'wanderer';
         this.addHistoryEvent('object_placed', `${alias} placed a ${obj.label}`);
-
-        if(db && this.roomCode) {
-            const objectsCol = collection(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'objects');
-            addDoc(objectsCol, {
-                emoji: obj.emoji,
-                label: obj.label,
-                author: obj.author,
-                id: obj.id,
-                isMythic: obj.isMythic || false,
-                createdAt: Date.now()
-            }).catch(err => console.error('[FIRESTORE_SUBCOL_WRITE] Error writing subcol object:', err));
-        }
     });
 
     this.bus.on(APP_EVENTS.ROOM_JOIN_REQUEST, (data: any) => {
@@ -684,6 +672,7 @@ export class SharedPresence {
       console.error('[DEBUG_LISTEN_ROOM] Subcollection notes snapshot error:', err);
     });
 
+    /* objects subcollection listener is deprecated
     const objectsCol = collection(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'objects');
     const objectsQuery = query(objectsCol, orderBy('createdAt', 'desc'), limit(20));
     
@@ -713,6 +702,7 @@ export class SharedPresence {
     }, (err) => {
       console.error('[DEBUG_LISTEN_ROOM] Subcollection objects snapshot error:', err);
     });
+    */
 
     const presenceCol = collection(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'presence');
     this.unsubPresence = onSnapshot(presenceCol, (subcolSnap) => {

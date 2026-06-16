@@ -33,7 +33,7 @@ const GUIDE_CONFIG: GuideStepConfig[] = [
   },
   {
     title: 'Leave something behind',
-    body: 'Pin a note, place an object, share a tape, or add a photo. The room keeps small traces.',
+    body: 'Pin a note, leave a whisper, share a tape, or add a photo. The room keeps small traces.',
     primaryAction: 'Got it',
     secondaryAction: 'Skip',
     highlightSelectors: [],
@@ -41,7 +41,7 @@ const GUIDE_CONFIG: GuideStepConfig[] = [
   },
   {
     title: 'The room remembers',
-    body: 'When you return later, the room can still hold its notes, photos, objects, tapes, and memories.',
+    body: 'When you return later, the room can still hold its notes, photos, whispers, tapes, and memories.',
     primaryAction: 'Enter the café',
     secondaryAction: '',
     highlightSelectors: [],

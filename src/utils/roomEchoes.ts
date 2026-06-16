@@ -70,11 +70,11 @@ export function getRoomEchoes(input: {
 
       case 'object_placed':
         if (count > 1) {
-          text = 'A few things were left on the table.';
+          text = 'A few things were left behind.';
         } else {
           text = alias 
-            ? `${alias} left something on the table.`
-            : 'Someone left something on the table.';
+            ? `${alias} left something behind.`
+            : 'Someone left something behind.';
         }
         tone = 'warm';
         break;

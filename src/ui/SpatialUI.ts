@@ -135,6 +135,7 @@ export class SpatialUI {
     $('btn-post-note')?.addEventListener('click', postNote);
     this.elements.noteInput?.addEventListener('keydown', (e: any) => { if(e.key === 'Enter') postNote(); });
 
+    /* Soft-removed table-obj-btn listeners
     $$('.table-obj-btn').forEach(btn => {
       if (btn.dataset.obj) {
           btn.addEventListener('click', (e: MouseEvent) => {
@@ -149,6 +150,7 @@ export class SpatialUI {
           });
       }
     });
+    */
 
     const playSpotify = () => {
         const url = (this.elements.spotifyInput as HTMLInputElement)?.value.trim(); 
@@ -1034,7 +1036,7 @@ export class SpatialUI {
         emptyDiv.style.opacity = '0.4';
         emptyDiv.appendChild(getIcon('pushpin', { class: 'hc-icon-lg', style: 'margin-bottom: 8px;' }));
         
-        const emptyText = createSafeElement('span', '', "This room's walls are bare. Pin a note, object, tape, or photo to build its memory...");
+        const emptyText = createSafeElement('span', '', "This room's walls are bare. Pin a note, whisper, tape, or photo to build its memory...");
         emptyText.style.fontSize = '0.8rem';
         emptyText.style.fontStyle = 'italic';
         emptyText.style.fontFamily = 'var(--font-ui)';
@@ -1168,7 +1170,9 @@ export class SpatialUI {
                 $('photo-wall-section')?.scrollIntoView({ behavior: 'smooth' });
             }
         });
-        actionsDiv.appendChild(restoreBtn);
+        if (item.type !== 'object') {
+            actionsDiv.appendChild(restoreBtn);
+        }
 
         // Show delete button only if current user is creator
         if (presence.userId && item.creatorUid === presence.userId) {
