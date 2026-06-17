@@ -11,6 +11,7 @@ import { getIcon } from './icons';
 import { getRoomSoul } from '../utils/roomSoul';
 import { getRoomEchoes } from '../utils/roomEchoes';
 import { getSpaceCapabilities, getPublicSpaceActivityConfig } from '../config/spaceCapabilities';
+import { isValidString } from '../utils/validation';
 
 function formatTimeAgo(timestamp: number): string {
     const seconds = Math.floor((Date.now() - timestamp) / 1000);
@@ -129,7 +130,7 @@ export class SpatialUI {
       const text = input?.value.trim(); if(!text) return;
       this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'paper_pin');
       const note: Note = { text, author: 'wanderer', id: Date.now() };
-      devLog('[NOTE_POSTED_EMIT]', note);
+      devLog('[NOTE_POSTED_EMIT]');
       this.bus.emit(APP_EVENTS.NOTE_POSTED, note);
       input.value = ''; 
     };
@@ -1363,7 +1364,7 @@ export class SpatialUI {
 
   async openRoomProfile(roomCode: string) {
     if (!db) return;
-    devLog('[ROOM_PROFILE] Opening profile for:', roomCode);
+    devLog('[ROOM_PROFILE] Opening profile');
     
     const modal = $('room-profile-modal');
     if (!modal) return;
@@ -1826,7 +1827,7 @@ export class SpatialUI {
 
   async openPublicProfile(uid: string) {
     if (!db) return;
-    devLog('[PUBLIC_PROFILE] Opening public profile for:', uid);
+    devLog('[PUBLIC_PROFILE] Opening public profile');
     
     const modal = $('public-profile-modal');
     if (!modal) return;
@@ -2082,33 +2083,51 @@ export class SpatialUI {
         if (activeSubTab === 'book') {
           const titleInput = createSafeElement('input', 'ethereal-input') as HTMLInputElement;
           titleInput.placeholder = 'Book Title';
-          titleInput.maxLength = 50;
+          titleInput.maxLength = 80;
 
           const authorInput = createSafeElement('input', 'ethereal-input') as HTMLInputElement;
           authorInput.placeholder = 'Author';
-          authorInput.maxLength = 50;
+          authorInput.maxLength = 80;
 
           const reviewInput = createSafeElement('input', 'ethereal-input') as HTMLInputElement;
           reviewInput.placeholder = 'Why you recommend it / your thoughts...';
-          reviewInput.maxLength = 140;
+          reviewInput.maxLength = 280;
 
           const submitBtn = createSafeElement('button', 'text-btn', 'Recommend Book');
           submitBtn.addEventListener('click', async () => {
             const title = titleInput.value.trim();
             const author = authorInput.value.trim();
             const review = reviewInput.value.trim();
-            if (!title || !author || !review) return;
+            if (!isValidString(title, 1, 80) || !isValidString(author, 1, 80) || !isValidString(review, 1, 280)) {
+              alert('Please check your input values and length constraints.');
+              return;
+            }
 
+            submitBtn.disabled = true;
+            titleInput.disabled = true;
+            authorInput.disabled = true;
+            reviewInput.disabled = true;
             this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'paper_pin');
-            await presence.saveMemory({
-              type: 'book_recommendation',
-              title: title,
-              description: `by ${author}`,
-              payload: { title, author, review, prompt: getActivePrompt() }
-            });
-            titleInput.value = '';
-            authorInput.value = '';
-            reviewInput.value = '';
+            
+            try {
+              await presence.saveMemory({
+                type: 'book_recommendation',
+                title: title,
+                description: `by ${author}`,
+                payload: { title, author, review, prompt: getActivePrompt() }
+              });
+              titleInput.value = '';
+              authorInput.value = '';
+              reviewInput.value = '';
+            } catch (err) {
+              console.error('[BOOK_REC_SAVE_ERROR]');
+              alert('Failed to save book recommendation.');
+            } finally {
+              submitBtn.disabled = false;
+              titleInput.disabled = false;
+              authorInput.disabled = false;
+              reviewInput.disabled = false;
+            }
           });
 
           formContent.appendChild(titleInput);
@@ -2118,27 +2137,43 @@ export class SpatialUI {
         } else if (activeSubTab === 'quote') {
           const quoteInput = createSafeElement('input', 'ethereal-input') as HTMLInputElement;
           quoteInput.placeholder = 'Share a passage or quote...';
-          quoteInput.maxLength = 140;
+          quoteInput.maxLength = 280;
 
           const authorInput = createSafeElement('input', 'ethereal-input') as HTMLInputElement;
           authorInput.placeholder = 'Book / Author reference';
-          authorInput.maxLength = 50;
+          authorInput.maxLength = 80;
 
           const submitBtn = createSafeElement('button', 'text-btn', 'Share Quote');
           submitBtn.addEventListener('click', async () => {
             const quote = quoteInput.value.trim();
             const author = authorInput.value.trim();
-            if (!quote || !author) return;
+            if (!isValidString(quote, 1, 280) || !isValidString(author, 1, 80)) {
+              alert('Please check your input values and length constraints.');
+              return;
+            }
 
+            submitBtn.disabled = true;
+            quoteInput.disabled = true;
+            authorInput.disabled = true;
             this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'paper_pin');
-            await presence.saveMemory({
-              type: 'quote',
-              title: quote.length > 30 ? quote.substring(0, 27) + '...' : quote,
-              description: `— ${author}`,
-              payload: { text: quote, author, prompt: getActivePrompt() }
-            });
-            quoteInput.value = '';
-            authorInput.value = '';
+            
+            try {
+              await presence.saveMemory({
+                type: 'quote',
+                title: quote.length > 30 ? quote.substring(0, 27) + '...' : quote,
+                description: `— ${author}`,
+                payload: { text: quote, author, prompt: getActivePrompt() }
+              });
+              quoteInput.value = '';
+              authorInput.value = '';
+            } catch (err) {
+              console.error('[QUOTE_SAVE_ERROR]');
+              alert('Failed to share quote.');
+            } finally {
+              submitBtn.disabled = false;
+              quoteInput.disabled = false;
+              authorInput.disabled = false;
+            }
           });
 
           formContent.appendChild(quoteInput);
@@ -2147,27 +2182,43 @@ export class SpatialUI {
         } else if (activeSubTab === 'reading') {
           const titleInput = createSafeElement('input', 'ethereal-input') as HTMLInputElement;
           titleInput.placeholder = 'What book are you reading?';
-          titleInput.maxLength = 50;
+          titleInput.maxLength = 80;
 
           const statusInput = createSafeElement('input', 'ethereal-input') as HTMLInputElement;
           statusInput.placeholder = 'Current thoughts or progress...';
-          statusInput.maxLength = 100;
+          statusInput.maxLength = 280;
 
           const submitBtn = createSafeElement('button', 'text-btn', 'Share Update');
           submitBtn.addEventListener('click', async () => {
             const title = titleInput.value.trim();
             const status = statusInput.value.trim();
-            if (!title || !status) return;
+            if (!isValidString(title, 1, 80) || !isValidString(status, 1, 280)) {
+              alert('Please check your input values and length constraints.');
+              return;
+            }
 
+            submitBtn.disabled = true;
+            titleInput.disabled = true;
+            statusInput.disabled = true;
             this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'paper_pin');
-            await presence.saveMemory({
-              type: 'currently_reading',
-              title: `Reading: ${title}`,
-              description: status,
-              payload: { title, thoughts: status, prompt: getActivePrompt() }
-            });
-            titleInput.value = '';
-            statusInput.value = '';
+            
+            try {
+              await presence.saveMemory({
+                type: 'currently_reading',
+                title: `Reading: ${title}`,
+                description: status,
+                payload: { title, thoughts: status, prompt: getActivePrompt() }
+              });
+              titleInput.value = '';
+              statusInput.value = '';
+            } catch (err) {
+              console.error('[READING_SAVE_ERROR]');
+              alert('Failed to save update.');
+            } finally {
+              submitBtn.disabled = false;
+              titleInput.disabled = false;
+              statusInput.disabled = false;
+            }
           });
 
           formContent.appendChild(titleInput);
@@ -2193,21 +2244,35 @@ export class SpatialUI {
     } else if (roomCode === 'window-seat') {
       const thoughtInput = createSafeElement('input', 'ethereal-input') as HTMLInputElement;
       thoughtInput.placeholder = 'Share a passing thought or answer the active prompt...';
-      thoughtInput.maxLength = 120;
+      thoughtInput.maxLength = 280;
 
       const submitBtn = createSafeElement('button', 'text-btn', 'Send into the night');
       submitBtn.addEventListener('click', async () => {
         const text = thoughtInput.value.trim();
-        if (!text) return;
+        if (!isValidString(text, 1, 280)) {
+          alert('Please check your input value and length constraints.');
+          return;
+        }
 
+        submitBtn.disabled = true;
+        thoughtInput.disabled = true;
         this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'paper_pin');
-        await presence.saveMemory({
-          type: 'rooftop_prompt',
-          title: text.length > 30 ? text.substring(0, 27) + '...' : text,
-          description: 'Passing thought on the Rooftop',
-          payload: { text, prompt: getActivePrompt() }
-        });
-        thoughtInput.value = '';
+        
+        try {
+          await presence.saveMemory({
+            type: 'rooftop_prompt',
+            title: text.length > 30 ? text.substring(0, 27) + '...' : text,
+            description: 'Passing thought on the Rooftop',
+            payload: { text, prompt: getActivePrompt() }
+          });
+          thoughtInput.value = '';
+        } catch (err) {
+          console.error('[ROOFTOP_SAVE_ERROR]');
+          alert('Failed to send thought.');
+        } finally {
+          submitBtn.disabled = false;
+          thoughtInput.disabled = false;
+        }
       });
 
       parent.appendChild(thoughtInput);
@@ -2216,7 +2281,7 @@ export class SpatialUI {
       const reflectionInput = document.createElement('textarea');
       reflectionInput.className = 'ethereal-input';
       reflectionInput.placeholder = 'Write down a quiet reflection...';
-      reflectionInput.maxLength = 200;
+      reflectionInput.maxLength = 280;
       reflectionInput.style.height = '80px';
       reflectionInput.style.padding = '10px';
       reflectionInput.style.resize = 'none';
@@ -2243,18 +2308,34 @@ export class SpatialUI {
       const submitBtn = createSafeElement('button', 'text-btn', 'Share reflection');
       submitBtn.addEventListener('click', async () => {
         const text = reflectionInput.value.trim();
-        if (!text) return;
+        if (!isValidString(text, 1, 280)) {
+          alert('Please check your input value and length constraints.');
+          return;
+        }
+
+        submitBtn.disabled = true;
+        reflectionInput.disabled = true;
+        checkbox.disabled = true;
+        this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'paper_pin');
 
         const isAnonymous = checkbox.checked;
-        this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'paper_pin');
-        await presence.saveMemory({
-          type: 'reflection',
-          title: text.length > 30 ? text.substring(0, 27) + '...' : text,
-          description: isAnonymous ? 'An anonymous reflection' : 'A reflection',
-          payload: { text, anonymous: isAnonymous, prompt: getActivePrompt() }
-        });
-        reflectionInput.value = '';
-        checkbox.checked = false;
+        try {
+          await presence.saveMemory({
+            type: 'reflection',
+            title: text.length > 30 ? text.substring(0, 27) + '...' : text,
+            description: isAnonymous ? 'An anonymous reflection' : 'A reflection',
+            payload: { text, anonymous: isAnonymous, prompt: getActivePrompt() }
+          });
+          reflectionInput.value = '';
+          checkbox.checked = false;
+        } catch (err) {
+          console.error('[REFLECTION_SAVE_ERROR]');
+          alert('Failed to save reflection.');
+        } finally {
+          submitBtn.disabled = false;
+          reflectionInput.disabled = false;
+          checkbox.disabled = false;
+        }
       });
 
       parent.appendChild(reflectionInput);
@@ -2278,33 +2359,51 @@ export class SpatialUI {
         if (activeSubTab === 'album') {
           const albumInput = createSafeElement('input', 'ethereal-input') as HTMLInputElement;
           albumInput.placeholder = 'Album Name';
-          albumInput.maxLength = 50;
+          albumInput.maxLength = 80;
 
           const artistInput = createSafeElement('input', 'ethereal-input') as HTMLInputElement;
           artistInput.placeholder = 'Artist';
-          artistInput.maxLength = 50;
+          artistInput.maxLength = 80;
 
           const thoughtsInput = createSafeElement('input', 'ethereal-input') as HTMLInputElement;
           thoughtsInput.placeholder = 'Why it belongs in the corner...';
-          thoughtsInput.maxLength = 140;
+          thoughtsInput.maxLength = 280;
 
           const submitBtn = createSafeElement('button', 'text-btn', 'Add to shelves');
           submitBtn.addEventListener('click', async () => {
             const album = albumInput.value.trim();
             const artist = artistInput.value.trim();
             const thoughts = thoughtsInput.value.trim();
-            if (!album || !artist || !thoughts) return;
+            if (!isValidString(album, 1, 80) || !isValidString(artist, 1, 80) || !isValidString(thoughts, 1, 280)) {
+              alert('Please check your input values and length constraints.');
+              return;
+            }
 
+            submitBtn.disabled = true;
+            albumInput.disabled = true;
+            artistInput.disabled = true;
+            thoughtsInput.disabled = true;
             this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'paper_pin');
-            await presence.saveMemory({
-              type: 'album_recommendation',
-              title: album,
-              description: `by ${artist}`,
-              payload: { album, artist, thoughts, prompt: getActivePrompt() }
-            });
-            albumInput.value = '';
-            artistInput.value = '';
-            thoughtsInput.value = '';
+            
+            try {
+              await presence.saveMemory({
+                type: 'album_recommendation',
+                title: album,
+                description: `by ${artist}`,
+                payload: { album, artist, thoughts, prompt: getActivePrompt() }
+              });
+              albumInput.value = '';
+              artistInput.value = '';
+              thoughtsInput.value = '';
+            } catch (err) {
+              console.error('[ALBUM_REC_SAVE_ERROR]');
+              alert('Failed to save album recommendation.');
+            } finally {
+              submitBtn.disabled = false;
+              albumInput.disabled = false;
+              artistInput.disabled = false;
+              thoughtsInput.disabled = false;
+            }
           });
 
           formContent.appendChild(albumInput);
@@ -2314,27 +2413,43 @@ export class SpatialUI {
         } else if (activeSubTab === 'song') {
           const songInput = createSafeElement('input', 'ethereal-input') as HTMLInputElement;
           songInput.placeholder = 'Song / Album reference';
-          songInput.maxLength = 50;
+          songInput.maxLength = 80;
 
           const memoryInput = createSafeElement('input', 'ethereal-input') as HTMLInputElement;
           memoryInput.placeholder = 'Your memory or feeling associated with it...';
-          memoryInput.maxLength = 140;
+          memoryInput.maxLength = 280;
 
           const submitBtn = createSafeElement('button', 'text-btn', 'Pin Memory');
           submitBtn.addEventListener('click', async () => {
             const song = songInput.value.trim();
             const memoryText = memoryInput.value.trim();
-            if (!song || !memoryText) return;
+            if (!isValidString(song, 1, 80) || !isValidString(memoryText, 1, 280)) {
+              alert('Please check your input values and length constraints.');
+              return;
+            }
 
+            submitBtn.disabled = true;
+            songInput.disabled = true;
+            memoryInput.disabled = true;
             this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'paper_pin');
-            await presence.saveMemory({
-              type: 'listening_memory',
-              title: song,
-              description: memoryText,
-              payload: { songOrAlbum: song, memory: memoryText, prompt: getActivePrompt() }
-            });
-            songInput.value = '';
-            memoryInput.value = '';
+            
+            try {
+              await presence.saveMemory({
+                type: 'listening_memory',
+                title: song,
+                description: memoryText,
+                payload: { songOrAlbum: song, memory: memoryText, prompt: getActivePrompt() }
+              });
+              songInput.value = '';
+              memoryInput.value = '';
+            } catch (err) {
+              console.error('[SONG_MEMORY_SAVE_ERROR]');
+              alert('Failed to save music memory.');
+            } finally {
+              submitBtn.disabled = false;
+              songInput.disabled = false;
+              memoryInput.disabled = false;
+            }
           });
 
           formContent.appendChild(songInput);

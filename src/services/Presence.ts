@@ -9,6 +9,8 @@ import { $ } from '../utils/dom';
 import { debounce as debounceUtil } from '../utils/timing';
 import { devLog } from '../utils/logger';
 import { isPublicSpace } from '../config/spaceCapabilities';
+import { isValidString } from '../utils/validation';
+
 
 declare const __app_id: any;
 
@@ -118,7 +120,7 @@ export class SharedPresence {
     });
 
     this.bus.on(APP_EVENTS.ROOM_JOIN_REQUEST, (data: any) => {
-        devLog('[ROOM_JOIN_REQUEST_RECEIVED]', data);
+        devLog('[ROOM_JOIN_REQUEST_RECEIVED]');
         const roomKey = typeof data === 'string' ? data : data.room;
         const theme = typeof data === 'object' ? data.theme : null;
         this.joinRoom(roomKey, theme);
@@ -164,7 +166,7 @@ export class SharedPresence {
                      this.broadcastActivity(`${this.profile?.alias || 'wanderer'} started a tape`, '📼');
                  }
              } else {
-                 devLog('[MEDIA_CONTROL_BLOCKED] Blocked non-host media control from:', this.userId);
+                 devLog('[MEDIA_CONTROL_BLOCKED] Blocked non-host media control');
                  const statusEl = $('wt-status');
                  if (statusEl) {
                      statusEl.textContent = 'Only the host can control shared playback';
@@ -178,10 +180,10 @@ export class SharedPresence {
          }
      });
  
-     this.bus.on(APP_EVENTS.MEDIA_ENDED, (data: any) => {
+     this.bus.on(APP_EVENTS.MEDIA_ENDED, () => {
          if(!this.userId || !db || !this.roomCode) return;
          if (isPublicSpace(this.roomCode)) return;
-         devLog('[MEDIA_ENDED_RECEIVED]', data);
+         devLog('[MEDIA_ENDED_RECEIVED]');
          if (this.currentVideoState && this.currentVideoState.hostId === this.userId) {
              devLog('[MEDIA_ENDED_RECEIVED] We are the host. Auto-advancing queue...');
              this.playNextInQueue();
@@ -199,7 +201,7 @@ export class SharedPresence {
         localStorage.setItem('hangout_cafe_anon_uid', storedId);
     }
     this.userId = storedId;
-    devLog('[FALLBACK_USER_ID_USED]', this.userId);
+    devLog('[FALLBACK_USER_ID_USED]');
     this.loadIdentity();
   }
 
@@ -396,10 +398,10 @@ export class SharedPresence {
 
     this.roomCode = roomKey; this.ghostUsers = {}; this.activeUsers = {}; this.lastActionTimestamp = 0;
     const isPublic = ['last-train', 'window-seat', 'between-pages', 'northern-lights'].includes(roomKey);
-    devLog('[ROOM_CHANGED_EMIT] joinRoom: roomKey = ' + roomKey + ', isPrivate = ' + !isPublic + ', theme = ' + theme);
+    devLog('[ROOM_CHANGED_EMIT] joinRoom: isPrivate = ' + !isPublic + ', theme = ' + theme);
     this.bus.emit(APP_EVENTS.ROOM_CHANGED, { room: roomKey, isPrivate: !isPublic, theme: theme });
 
-    devLog('[DEBUG_JOIN_ROOM] userId = ' + this.userId + ', dbExists = ' + !!db + ', isPublic = ' + isPublic + ', theme = ' + theme);
+    devLog('[DEBUG_JOIN_ROOM] dbExists = ' + !!db + ', isPublic = ' + isPublic + ', theme = ' + theme);
     if(!this.userId || !db) return;
     
     const roomRef = doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', roomKey);
@@ -579,7 +581,7 @@ export class SharedPresence {
         const isPublic = isPublicSpace(this.roomCode!);
         if(data.theme) {
             devLog('[THEME_RESTORED]', data.theme);
-            devLog('[ROOM_CHANGED_EMIT] listenToRoom sync theme:', { room: this.roomCode, isPrivate: !isPublic, theme: data.theme });
+            devLog('[ROOM_CHANGED_EMIT] listenToRoom sync theme:', { isPrivate: !isPublic, theme: data.theme });
             this.bus.emit(APP_EVENTS.ROOM_CHANGED, { room: this.roomCode, isPrivate: !isPublic, theme: data.theme });
         }
 
@@ -902,7 +904,7 @@ export class SharedPresence {
           devLog('[QUEUE_OPERATION] Enqueuing media is not allowed in public spaces.');
           return;
       }
-      devLog('[QUEUE_OPERATION] Enqueuing media:', title, url);
+      devLog('[QUEUE_OPERATION] Enqueuing media');
       const queueCol = collection(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'queue');
       await addDoc(queueCol, {
           url,
@@ -927,7 +929,7 @@ export class SharedPresence {
           return;
       }
       
-      devLog('[QUEUE_OPERATION] Starting queued media:', itemId);
+      devLog('[QUEUE_OPERATION] Starting queued media');
       const targetItem = this.queue.find(q => q.id === itemId);
       if (!targetItem) return;
 
@@ -984,7 +986,7 @@ export class SharedPresence {
       }
 
       if (nextItem) {
-          devLog('[QUEUE_OPERATION] Found next item:', nextItem.title);
+          devLog('[QUEUE_OPERATION] Found next item');
           const itemRef = doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'queue', nextItem.id);
           await updateDoc(itemRef, { status: 'playing' }).catch(err => console.error('[QUEUE_OPERATION] update status playing error:', err));
 
@@ -1030,7 +1032,7 @@ export class SharedPresence {
       if (this.currentVideoState && this.currentVideoState.hostId) {
           const currentHostId = this.currentVideoState.hostId;
           if (!this.activeUsers[currentHostId]) {
-              devLog('[HOST_CONTINUITY] Current host has departed:', currentHostId);
+              devLog('[HOST_CONTINUITY] Current host has departed');
               const activeEntries = Object.entries(this.activeUsers);
               if (activeEntries.length > 0) {
                   activeEntries.sort((a, b) => {
@@ -1040,7 +1042,7 @@ export class SharedPresence {
                       return a[0].localeCompare(b[0]);
                   });
                   const oldestUid = activeEntries[0][0];
-                  devLog('[HOST_CONTINUITY] Oldest active participant is:', oldestUid);
+                  devLog('[HOST_CONTINUITY] Oldest active participant identified');
                   
                   if (oldestUid === this.userId) {
                       devLog('[HOST_CONTINUITY] We are the oldest active participant. Initiating takeover...');
@@ -1102,7 +1104,7 @@ export class SharedPresence {
 
   async addHistoryEvent(type: 'tape_played' | 'note_pinned' | 'object_placed' | 'host_changed' | 'room_created' | 'photo_added' | 'whisper_left', text: string) {
       if (!this.userId || !db || !this.roomCode) return;
-      devLog('[ROOM_HISTORY] Writing history event:', type, text);
+      devLog('[ROOM_HISTORY] Writing history event of type:', type);
       const historyCol = collection(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'history');
       await addDoc(historyCol, {
           type,
@@ -1116,17 +1118,75 @@ export class SharedPresence {
 
   async saveMemory(memory: Omit<RoomMemory, 'id' | 'createdAt' | 'createdBy' | 'creatorUid'>) {
       if (!this.userId || !db || !this.roomCode) return;
-      devLog('[ROOM_MEMORIES] Saving memory:', memory);
+      devLog('[ROOM_MEMORIES] Saving memory');
+
+      const title = typeof memory.title === 'string' ? memory.title.trim() : '';
+      const description = typeof memory.description === 'string' ? memory.description.trim() : '';
+
+      if (!isValidString(title, 1, 80)) {
+          throw new Error('Invalid memory title');
+      }
+
+      if (!isValidString(description, 0, 280)) {
+          throw new Error('Invalid memory description');
+      }
+
+      const payload: any = {};
+      if (memory.payload) {
+          for (const key of Object.keys(memory.payload)) {
+              let val = memory.payload[key];
+              if (typeof val === 'string') {
+                  val = val.trim();
+                  const shortFields = ['title', 'author', 'artist', 'album', 'songOrAlbum', 'emoji', 'label', 'type'];
+                  const longFields = ['text', 'review', 'thoughts', 'memory', 'description'];
+                  
+                  if (shortFields.includes(key)) {
+                      if (!isValidString(val, 1, 80)) {
+                          throw new Error(`Invalid value for payload field: ${key}`);
+                      }
+                  } else if (longFields.includes(key)) {
+                      if (!isValidString(val, 1, 280)) {
+                          throw new Error(`Invalid value for payload field: ${key}`);
+                      }
+                  } else if (key === 'url') {
+                      if (!isValidString(val, 1, 2048)) {
+                          throw new Error(`Invalid value for payload field: ${key}`);
+                      }
+                  } else {
+                      if (!isValidString(val, 0, 280)) {
+                          throw new Error(`Invalid value for payload field: ${key}`);
+                      }
+                  }
+                  payload[key] = val;
+              } else if (typeof val === 'boolean') {
+                  payload[key] = val;
+              } else if (val && typeof val === 'object') {
+                  if (key === 'prompt') {
+                      const id = typeof val.id === 'string' ? val.id.trim() : '';
+                      const text = typeof val.text === 'string' ? val.text.trim() : '';
+                      if (!isValidString(id, 1, 80) || !isValidString(text, 1, 280)) {
+                          throw new Error('Invalid memory prompt details');
+                      }
+                      payload[key] = { id, text };
+                  } else {
+                      throw new Error('Invalid payload structure');
+                  }
+              } else {
+                  payload[key] = val;
+              }
+          }
+      }
+
       const memoriesCol = collection(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'memories');
-      const createdBy = (memory.payload && memory.payload.anonymous) ? 'Someone' : (this.profile?.alias || 'wanderer');
+      const createdBy = (payload && payload.anonymous) ? 'Someone' : (this.profile?.alias || 'wanderer');
       await addDoc(memoriesCol, {
           type: memory.type,
-          title: memory.title,
-          description: memory.description || '',
+          title,
+          description,
           createdAt: Date.now(),
           createdBy,
           creatorUid: this.userId,
-          payload: memory.payload
+          payload
       }).then(() => {
           const roomRef = doc(db!, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode!);
           updateDoc(roomRef, {
@@ -1145,14 +1205,17 @@ export class SharedPresence {
                   updatedAt: Date.now()
               }).then(() => {
                   if (this.profile) this.profile.memoriesCreated = (this.profile.memoriesCreated || 0) + 1;
-              }).catch(err => console.error('[MEMORIES_COUNT_SYNC] Error incrementing memoriesCreated:', err));
+              }).catch(err => console.error('[MEMORIES_COUNT_SYNC] Error:', err));
           }
-      }).catch(err => console.error('[ROOM_MEMORIES] Error saving memory:', err));
+      }).catch(err => {
+          console.error('[ROOM_MEMORIES] Error saving memory:', err);
+          throw err;
+      });
   }
 
   async removeMemory(memoryId: string) {
       if (!this.userId || !db || !this.roomCode) return;
-      devLog('[ROOM_MEMORIES] Removing memory:', memoryId);
+      devLog('[ROOM_MEMORIES] Removing memory');
       const memoryRef = doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'memories', memoryId);
       await deleteDoc(memoryRef).then(() => {
           const roomRef = doc(db!, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode!);
@@ -1187,13 +1250,23 @@ export class SharedPresence {
 
   async savePhoto(url: string, caption: string) {
       if (!this.userId || !db || !this.roomCode) return;
-      devLog('[ROOM_PHOTOS] Saving photo:', url, caption);
+      if (isPublicSpace(this.roomCode)) {
+          throw new Error('Photo uploads not permitted in public spaces');
+      }
+
+      const trimmedUrl = url.trim();
+      const trimmedCaption = caption.trim();
+      if (!isValidString(trimmedUrl, 1, 2048) || !isValidString(trimmedCaption, 1, 280)) {
+          throw new Error('Invalid photo input values');
+      }
+
+      devLog('[ROOM_PHOTOS] Saving photo');
       const photosCol = collection(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'photos');
       const alias = this.profile?.alias || 'wanderer';
       
       await addDoc(photosCol, {
-          url,
-          caption,
+          url: trimmedUrl,
+          caption: trimmedCaption,
           uploadedBy: alias,
           creatorUid: this.userId,
           createdAt: Date.now()
@@ -1213,14 +1286,17 @@ export class SharedPresence {
                   updatedAt: Date.now()
               }).then(() => {
                   if (this.profile) this.profile.photosUploaded = (this.profile.photosUploaded || 0) + 1;
-              }).catch(err => console.error('[PHOTOS_COUNT_SYNC] Error incrementing photosUploaded:', err));
+              }).catch(err => console.error('[PHOTOS_COUNT_SYNC] Error:', err));
           }
-      }).catch(err => console.error('[ROOM_PHOTOS] Error saving photo:', err));
+      }).catch(err => {
+          console.error('[ROOM_PHOTOS] Error saving photo:', err);
+          throw err;
+      });
   }
 
   async deletePhoto(photoId: string) {
       if (!this.userId || !db || !this.roomCode) return;
-      devLog('[ROOM_PHOTOS] Deleting photo:', photoId);
+      devLog('[ROOM_PHOTOS] Deleting photo');
       const photoRef = doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'photos', photoId);
       await deleteDoc(photoRef).then(async () => {
           const roomRef = doc(db!, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode!);
@@ -1481,11 +1557,15 @@ export class SharedPresence {
 }
 
 export async function uploadPhoto(file: File): Promise<string> {
+  const presence = (window as any).presence;
+  const roomCode = presence?.roomCode || 'default-room';
+  if (isPublicSpace(roomCode)) {
+    throw new Error('Photo uploads not permitted in public spaces');
+  }
   if (typeof window !== 'undefined' && (window as any).mockUploadPhoto) {
     return (window as any).mockUploadPhoto(file);
   }
-  const presence = (window as any).presence;
-  const roomCode = presence?.roomCode || 'default-room';
+  devLog('[ROOM_PHOTOS] Uploading photo');
   const storage = getStorage();
   const storageRef = ref(storage, `photos/${roomCode}/${Date.now()}_${file.name}`);
   const snapshot = await uploadBytes(storageRef, file);
