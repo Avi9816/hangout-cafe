@@ -523,7 +523,7 @@ export class SpatialUI {
             const soulMeta = createSafeElement('div', 'room-card-soul', soulObj.shortDescription);
             card.appendChild(soulMeta);
 
-            const joinBtn = createSafeElement('button', 'text-btn explore-card-action', 'Enter room');
+            const joinBtn = createSafeElement('button', 'text-btn explore-card-action', 'Enter space');
             joinBtn.addEventListener('click', (e) => {
                 e.stopPropagation(); // Stop click from opening profile modal
                 this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'wood_creak');
@@ -1020,7 +1020,7 @@ export class SpatialUI {
         emptyDiv.style.opacity = '0.4';
         emptyDiv.appendChild(getIcon('pushpin', { class: 'hc-icon-lg', style: 'margin-bottom: 8px;' }));
         
-        const emptyText = createSafeElement('span', '', "This room's walls are bare. Pin a note, whisper, tape, or photo to build its memory...");
+        const emptyText = createSafeElement('span', '', "This space's walls are bare. Pin a note, whisper, tape, or photo to build its memory...");
         emptyText.style.fontSize = '0.8rem';
         emptyText.style.fontStyle = 'italic';
         emptyText.style.fontFamily = 'var(--font-ui)';
@@ -1686,7 +1686,7 @@ export class SpatialUI {
       const soulMeta = createSafeElement('div', 'room-card-soul', soulObj.shortDescription);
       card.appendChild(soulMeta);
 
-      const joinBtn = createSafeElement('button', 'text-btn favorite-card-action', 'Enter room');
+      const joinBtn = createSafeElement('button', 'text-btn favorite-card-action', 'Enter space');
       joinBtn.addEventListener('click', (e) => {
         e.stopPropagation(); // Stop click from opening profile modal
         this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'wood_creak');

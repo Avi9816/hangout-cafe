@@ -99,9 +99,9 @@ export function getRoomEchoes(input: {
 
       case 'host_changed':
         if (count > 1) {
-          text = 'The room passed the tape around.';
+          text = 'The space passed the tape around.';
         } else {
-          text = 'The room passed the tape to someone else.';
+          text = 'The space passed the tape to someone else.';
         }
         tone = 'media';
         break;
@@ -148,7 +148,7 @@ export function getRoomEchoes(input: {
   if (visitCount > 1) {
     metadataEchoes.push({
       id: 'metadata-visit',
-      text: 'This room has been returned to.',
+      text: 'This space has been returned to.',
       tone: 'warm',
       sourceType: 'metadata'
     });
@@ -166,7 +166,7 @@ export function getRoomEchoes(input: {
   if (memoryCount > 0) {
     metadataEchoes.push({
       id: 'metadata-memory',
-      text: 'This room has started keeping memories.',
+      text: 'This space has started keeping memories.',
       tone: 'memory',
       sourceType: 'metadata'
     });
@@ -175,7 +175,7 @@ export function getRoomEchoes(input: {
   if (photoCount > 0) {
     metadataEchoes.push({
       id: 'metadata-photo',
-      text: 'There are photographs tucked into this room.',
+      text: 'There are photographs tucked into this space.',
       tone: 'memory',
       sourceType: 'metadata'
     });

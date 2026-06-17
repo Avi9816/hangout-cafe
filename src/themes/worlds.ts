@@ -14,7 +14,7 @@ export interface WorldConfig {
 export const WORLDS: Record<string, WorldConfig> = {
   'window-seat': {
     theme: 'window-seat',
-    name: 'Window Seat',
+    name: 'Rooftop',
     desc: 'watching heavy drops race down the glass in silence.',
     weather: 'rain',
     ambientCopy: 'The city never really sleeps.',
@@ -35,7 +35,7 @@ export const WORLDS: Record<string, WorldConfig> = {
   },
   'last-train': {
     theme: 'last-train',
-    name: 'The Last Train',
+    name: 'Vinyl Corner',
     desc: 'a rhythmic journey through the sleeping city suburbs.',
     weather: 'streaks',
     ambientCopy: 'The final train has already gone.',
@@ -56,7 +56,7 @@ export const WORLDS: Record<string, WorldConfig> = {
   },
   'between-pages': {
     theme: 'between-pages',
-    name: 'Between Pages',
+    name: 'Between The Pages',
     desc: 'a sanctuary of old paper and the smell of ancient ink.',
     weather: 'motes',
     ambientCopy: 'Some stories never leave.',
@@ -98,7 +98,7 @@ export const WORLDS: Record<string, WorldConfig> = {
   },
   'default': {
     theme: 'default',
-    name: 'Late Night Café',
+    name: 'After Hours',
     desc: 'a forgotten place on the internet.',
     weather: 'rain',
     ambientCopy: 'the night is young...',

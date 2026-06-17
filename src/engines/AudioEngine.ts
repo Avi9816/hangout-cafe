@@ -197,7 +197,7 @@ export class AudioEngine {
        osc2.connect(this.ambienceGain); osc2.start();
        this.secondarySrc = osc2;
     } else {
-       // Default Rain (Window Seat)
+       // Default Rain (Rooftop)
        const src = this.ctx.createBufferSource(); src.buffer = buffer; src.loop = true;
        const filter = this.ctx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 400;
        src.connect(filter); filter.connect(this.ambienceGain); src.start();

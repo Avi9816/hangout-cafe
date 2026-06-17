@@ -364,7 +364,7 @@ export class Environment {
         }
     }
     
-    if (this.elements.roomTitle) this.elements.roomTitle.textContent = "Late Night Café";
+    if (this.elements.roomTitle) this.elements.roomTitle.textContent = "After Hours";
     applyAtmosphere('default');
     this.renderWeather();
     this.stationLoop(false);
@@ -387,7 +387,7 @@ export class Environment {
     const soulObj = getRoomSoul(metaData);
     const soulTextEl = $('room-soul-text');
     if (soulTextEl) {
-        soulTextEl.textContent = `This room ${soulObj.shortDescription.toLowerCase()}`;
+        soulTextEl.textContent = `This space ${soulObj.shortDescription.toLowerCase()}`;
     }
     const roomView = $('room-view');
     if (roomView) {
@@ -416,7 +416,7 @@ export class Environment {
     // Private room is always quiet
     const soulTextEl = $('room-soul-text');
     if (soulTextEl) {
-        soulTextEl.textContent = 'This room is still quiet.';
+        soulTextEl.textContent = 'This space is still quiet.';
     }
     const roomView = $('room-view');
     if (roomView) {
@@ -473,7 +473,7 @@ export class Environment {
           
           const soulTextEl = $('room-soul-text');
           if (soulTextEl) {
-              soulTextEl.textContent = `This room ${soulObj.shortDescription.toLowerCase()}`;
+              soulTextEl.textContent = `This space ${soulObj.shortDescription.toLowerCase()}`;
           }
 
           const roomView = $('room-view');

@@ -398,7 +398,7 @@ export function mount(container: HTMLElement): () => void {
   // Hanging brand sign
   const sign = document.createElement('div');
   sign.className = 'landing-cafe-sign';
-  sign.textContent = 'Late Night Café';
+  sign.textContent = 'After Hours';
   silhouetteLayer.appendChild(sign);
 
   const ctx = canvas.getContext('2d');

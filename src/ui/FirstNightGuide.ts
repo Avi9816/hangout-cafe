@@ -18,7 +18,7 @@ const LOCAL_STORAGE_KEY = 'lateNightCafe.firstNightGuide.version';
 const GUIDE_CONFIG: GuideStepConfig[] = [
   {
     title: 'First night?',
-    body: 'Late Night Café is a quiet shared room that remembers who passed through.',
+    body: 'After Hours is a collection of persistent digital places for shared interests and quiet conversations.',
     primaryAction: 'Begin',
     secondaryAction: 'Skip',
     highlightSelectors: [],
@@ -26,7 +26,7 @@ const GUIDE_CONFIG: GuideStepConfig[] = [
   },
   {
     title: 'Choose a corner',
-    body: 'Pick a public room, or whisper a private room name.',
+    body: 'Find a public space for the hour you are in, or whisper a name to gather in a private circle.',
     primaryAction: 'Show me',
     secondaryAction: 'Skip',
     highlightSelectors: ['#destinations', '#private-room-section'],
@@ -34,16 +34,16 @@ const GUIDE_CONFIG: GuideStepConfig[] = [
   },
   {
     title: 'Leave something behind',
-    body: 'Pin a note, leave a whisper, share a tape, or add a photo. The room keeps small traces.',
+    body: 'Pin a note, leave a whisper, share a tape, or add a photo. The space keeps small traces.',
     primaryAction: 'Got it',
     secondaryAction: 'Skip',
     highlightSelectors: [],
     scrollTargetSelector: null
   },
   {
-    title: 'The room remembers',
-    body: 'When you return later, the room can still hold its notes, photos, whispers, tapes, and memories.',
-    primaryAction: 'Enter the café',
+    title: 'The space remembers',
+    body: 'When you return, the space still holds its notes, photos, whispers, tapes, and memories. Not everything needs to be a feed.',
+    primaryAction: 'Step inside',
     secondaryAction: '',
     highlightSelectors: [],
     scrollTargetSelector: null

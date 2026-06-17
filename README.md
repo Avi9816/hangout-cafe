@@ -1,227 +1,56 @@
-# ☕ Hangout Café
+# 🌌 After Hours
 
-A persistent, real-time social ambient space built with modern web technologies.
+After Hours is a collection of persistent digital places where people discover others through shared interests, form connections, and continue conversations in intimate private spaces.
 
-Hangout Café is designed as a collection of atmospheric shared rooms where people can gather, leave memories behind, watch media together, and inhabit persistent spaces that continue to exist even when everyone leaves.
-
-Unlike traditional chat rooms, Hangout Café focuses on presence, atmosphere, shared media, and long-lived room continuity.
+Designed around a quiet, poetic, and atmospheric aesthetic, After Hours is a place you miss when you are away. It focuses on presence, shared trace memories, and long-lived spatial continuity rather than rapid-fire feeds or SaaS-style dashboards.
 
 ---
 
 # ✨ Features
 
-## 🌌 Atmospheric Rooms
+## 🌌 Atmospheric Spaces
 
-Choose from multiple themed environments:
+Choose from multiple persistent public environments, each with its own visual atmosphere, custom weather system, and ambient sounds:
 
-- 🚆 The Last Train
-- 🌧️ Window Seat
-- 📚 Between Pages
-- 🌌 Northern Lights
-
-Each room includes its own visual atmosphere and ambient mood.
-
-Examples:
-
-- Moving train lights
-- Rain and lightning
-- Floating library dust
-- Aurora ribbons and stars
+- **📚 Between The Pages**: A warm digital library for sharing books, quotes, recommendations, and thoughtful discussions.
+- **🏙️ Rooftop**: A late-night city skyline. A casual place for low-pressure social discovery and conversations.
+- **🌌 Northern Lights**: A quiet and contemplative space for reflections, daily prompts, and deeper anonymous thoughts.
+- **📻 Vinyl Corner**: A warm record shop / late-night listening corner for music discovery, favorite albums, and shared musical tastes.
 
 ---
 
 ## 👥 Real-Time Presence
 
-Users can:
-
-- Join public rooms
-- Create private rooms
-- See active participants
-- View live participant counts
-- Observe room activity in real time
-
-Presence updates automatically when users:
-
-- Join
-- Leave
-- Refresh
-- Disconnect
-
-Stale sessions are automatically removed.
+- Join public spaces or create private circles.
+- See active wanderers and view live space participant counts.
+- Observe activity and status updates in real time.
+- Presence updates automatically upon joining, leaving, refreshing, or disconnecting.
 
 ---
 
-## 🎬 Shared VHS / Movie Watching
+## 🎬 Shared Media Sync (VHS)
 
-Hangout Café includes synchronized shared media playback powered by WebTorrent.
-
-Features:
-
-- VHS-style media experience
-- WebTorrent streaming
-- Shared playback state
-- Play / Pause sync
-- Seek sync
-- Late-join recovery
-- Drift correction
-- Host authority controls
-- Automatic host transfer
-
-Supported media:
-
-- Local movie files
-- Magnet links
-- Torrent-based video playback
+Spaces support synchronized media playback using peer-to-peer streaming:
+- VHS-style player interface.
+- Play, pause, and seek synchronization.
+- Automatic host recovery and transaction-based ownership transfer.
+- Persistent media queue synced in real time.
 
 ---
 
-## 📼 Shared Media Queue
+## 📝 Space Memory & Traces
 
-Rooms support a synchronized queue system.
+Spaces have history and soul. They remember what happened even when everyone is away:
 
-Features:
-
-- Queue media items
-- Start queued items
-- Skip media
-- Auto-advance playback
-- Persistent queue state
-- Real-time queue synchronization
-
-Only one item can play at a time.
-
----
-
-## 🔄 Host Continuity
-
-If the current media host leaves:
-
-- Host authority automatically transfers
-- Oldest active participant becomes host
-- Playback continuity is preserved
-- Queue management continues without interruption
-
-Transaction-based ownership transfer prevents race conditions.
-
----
-
-## 📝 Shared Wall
-
-Leave notes for everyone in the room.
-
-Features:
-
-- Real-time synchronization
-- Persistent storage
-- Cross-tab updates
-- Multi-user support
-- Concurrent posting protection
-
-Notes survive page refreshes and room inactivity.
-
----
-
-## 🧸 Shared Table
-
-Place ambient objects into the room.
-
-Examples:
-
-- Warm coffee
-- Open book
-- Teddy bear
-- Lamp
-- Polaroid
-
-Objects:
-
-- Synchronize in real time
-- Persist across sessions
-- Support concurrent placement
-
----
-
-## 🌠 Ambient Activity Feed
-
-Lightweight ephemeral room activity.
-
-Examples:
-
-- User entered room
-- Note pinned
-- Object placed
-- Tape started
-
-Features:
-
-- Real-time propagation
-- Automatic expiration
-- No database growth
-- Atmosphere-focused design
-
----
-
-## 🧠 Persistent Room Memory System
-
-Rooms remember what happened.
-
-### Room History
-
-Chronological room activity logs:
-
-- Room creation
-- Tape playback
-- Host transfers
-- Notes pinned
-- Objects placed
-
-History is:
-
-- Immutable
-- Real-time
-- Bounded for performance
-
-### Pinned Memories
-
-Users can preserve meaningful room artifacts:
-
-- Notes
-- Objects
-- Tapes
-- Moments
-
-Features:
-
-- Creator ownership
-- Persistent storage
-- Restore actions
-- Cross-session continuity
-
-Rooms continue to feel inhabited even after everyone leaves.
-
----
-
-## ♻️ Room Restoration
-
-When a room becomes empty:
-
-The room still remembers:
-
-- Theme
-- Current VHS tape
-- Queue state
-- History
-- Pinned memories
-
-When someone returns:
-
-Everything is restored automatically.
+- **📝 Note Wall**: Leave notes pinned to the space's walls for others to find. Notes survive page refreshes and room inactivity.
+- **🧠 Space Soul & Echoes**: Each space determines its own "soul level" (Quiet, Remembered, Lived-in, or Old Soul) based on accumulated history. Space Echoes display a poetic trace log of past actions.
+- **♻️ Restoration**: When a space becomes empty and is later returned to, its theme, active media state, queue, and notes are automatically restored.
 
 ---
 
 # 🏗️ Architecture
 
-Hangout Café uses a modular EventBus-driven architecture.
+After Hours uses a modular, EventBus-driven architecture to keep code decoupled and maintainable:
 
 ```text
 src/
@@ -245,175 +74,59 @@ src/
 │   ├── SpatialUI.ts
 │   └── AmbientFeed.ts
 ├── utils/
+│   ├── roomSoul.ts
+│   └── roomEchoes.ts
 └── main.ts
 ```
 
-### Design Principles
-
-- EventBus-driven communication
-- No direct module coupling
-- Firestore as shared state layer
-- Realtime synchronization
-- Host-authoritative media control
-- Persistent room continuity
-- Scalable subcollection architecture
+### Decoupled Event System
+All main services communicate through a centralized `EventBus` to prevent direct module coupling and facilitate robust real-time synchronization.
 
 ---
 
 # 🔥 Firestore Architecture
 
-The project uses Firestore subcollections to avoid document contention and scaling issues.
+The project uses Firestore subcollections to prevent write contention and scale efficiently. The database collections retain their original identifiers to ensure compatibility with existing security rules and schemas:
 
-### Room Root
-
-```text
-rooms/{roomCode}
-```
-
-Stores:
-
-- theme
-- video state
-- latest ambient action
-
----
-
-### Notes
-
-```text
-rooms/{roomCode}/notes/{noteId}
-```
-
----
-
-### Objects
-
-```text
-rooms/{roomCode}/objects/{objectId}
-```
-
----
-
-### Presence
-
-```text
-rooms/{roomCode}/presence/{userId}
-```
-
----
-
-### Queue
-
-```text
-rooms/{roomCode}/queue/{queueItemId}
-```
-
----
-
-### History
-
-```text
-rooms/{roomCode}/history/{historyId}
-```
-
----
-
-### Memories
-
-```text
-rooms/{roomCode}/memories/{memoryId}
-```
-
----
-
-# 🔐 Security
-
-Firestore security rules enforce:
-
-- Authenticated writes only
-- User-owned presence documents
-- Immutable room history
-- Creator-owned memories
-- Immutable notes and objects
-- Protected room state
-
-Anonymous Firebase Authentication is supported.
+- **Spaces (Rooms) Root**: `rooms/{roomCode}`
+- **Notes subcollection**: `rooms/{roomCode}/notes/{noteId}`
+- **Presence subcollection**: `rooms/{roomCode}/presence/{userId}`
+- **Queue subcollection**: `rooms/{roomCode}/queue/{queueItemId}`
+- **History subcollection**: `rooms/{roomCode}/history/{historyId}`
+- **Memories subcollection**: `rooms/{roomCode}/memories/{memoryId}`
 
 ---
 
 # 🛠️ Tech Stack
 
-### Frontend
-
-- Vite
-- TypeScript
-- HTML
-- CSS
-
-### Realtime
-
-- Firebase Auth
-- Cloud Firestore
-
-### Media
-
-- WebTorrent
-- YouTube Embed API
-- Spotify Embed API
-
-### Architecture
-
-- EventBus
-- Modular Services
-- Host Authority Model
-- Realtime Synchronization Layer
+- **Frontend**: Vite, TypeScript, HTML5, Vanilla CSS
+- **Realtime / Auth**: Firebase Auth (Anonymous), Cloud Firestore
+- **Media**: WebTorrent, YouTube Embed API, Spotify Embed API
 
 ---
 
 # 🚀 Development
 
-Install dependencies:
-
+### 1. Install Dependencies
 ```bash
 npm install
 ```
 
-Create environment file:
-
+### 2. Configure Environment
 ```bash
 cp .env.example .env
 ```
+Ensure you populate the Firebase credentials inside your `.env` file.
 
-Run development server:
-
+### 3. Start Development Server
 ```bash
 npm run dev
 ```
 
-Build production bundle:
-
+### 4. Build Production Bundle
 ```bash
 npm run build
 ```
-
----
-
-# 🎯 Project Vision
-
-Hangout Café is an experiment in persistent digital third places.
-
-A room is not simply a chat session.
-
-It is a space that:
-
-- remembers
-- evolves
-- accumulates history
-- preserves memories
-- survives inactivity
-- welcomes people back
-
-The goal is to create shared online environments that feel inhabited rather than merely connected.
 
 ---
 

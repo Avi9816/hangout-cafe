@@ -133,11 +133,11 @@ async function runVerification() {
   await page.click('#btn-replay-guide');
   await sleep(1000);
 
-  // Enter room Window Seat
-  console.log("Entering Room Window Seat while guide is open...");
+  // Enter Rooftop
+  console.log("Entering Room Rooftop while guide is open...");
   await page.evaluate(() => {
     const cards = Array.from(document.querySelectorAll('.dest-btn'));
-    const card = cards.find(c => c.textContent.includes('Window Seat'));
+    const card = cards.find(c => c.textContent.includes('Rooftop'));
     if (card) {
       const joinBtn = card.querySelector('.dest-card-join');
       if (joinBtn) joinBtn.click();

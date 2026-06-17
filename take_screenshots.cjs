@@ -73,11 +73,11 @@ async function takeScreenshots() {
   await page.evaluate(() => window.scrollTo(0, 0));
   await sleep(500);
 
-  // Join Window Seat
-  console.log("Entering room Window Seat...");
+  // Join Rooftop
+  console.log("Entering Rooftop...");
   await page.evaluate(() => {
     const cards = Array.from(document.querySelectorAll('.dest-btn'));
-    const card = cards.find(c => c.textContent.includes('Window Seat'));
+    const card = cards.find(c => c.textContent.includes('Rooftop'));
     if (card) {
       const joinBtn = card.querySelector('.dest-card-join');
       if (joinBtn) joinBtn.click();

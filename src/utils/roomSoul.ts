@@ -113,9 +113,9 @@ export function getRoomSoul(roomMeta: Partial<RoomMetadata>): RoomSoul {
 
   // 5. Determine level
   let level: RoomSoulLevel = 'quiet';
-  let label = 'Quiet room';
+  let label = 'Quiet space';
   let shortDescription = 'Still quiet.';
-  let description = 'This room is still quiet. A few traces may be all it needs.';
+  let description = 'This space is still quiet. A few traces may be all it needs.';
   let cssClass = 'room-soul-quiet';
   let accentHint = 'muted';
 
@@ -123,19 +123,19 @@ export function getRoomSoul(roomMeta: Partial<RoomMetadata>): RoomSoul {
     level = 'old-soul';
     label = 'Old soul';
     shortDescription = 'Old enough to keep secrets.';
-    description = 'This room has been returned to, remembered, and left with stories.';
+    description = 'This space has been returned to, remembered, and left with stories.';
     cssClass = 'room-soul-old-soul';
     accentHint = 'gold';
   } else if (totalScore >= 40) {
     level = 'lived-in';
-    label = 'Lived-in room';
+    label = 'Lived-in space';
     shortDescription = 'Feels lived-in.';
-    description = 'This room has gathered notes, visits, and small pieces of people.';
+    description = 'This space has gathered notes, visits, and small pieces of people.';
     cssClass = 'room-soul-lived-in';
     accentHint = 'orange';
   } else if (totalScore >= 15) {
     level = 'remembered';
-    label = 'Remembered room';
+    label = 'Remembered space';
     shortDescription = 'Beginning to remember.';
     description = 'People have started leaving small traces here.';
     cssClass = 'room-soul-remembered';
