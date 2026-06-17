@@ -2,11 +2,30 @@ const puppeteer = require('puppeteer-core');
 const { spawn, execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const http = require('http');
 
 const CHROME_PATH = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function isPortActive(port) {
+    return new Promise((resolve) => {
+        const req = http.request({
+            host: 'localhost',
+            port: port,
+            path: '/',
+            method: 'GET',
+            timeout: 1000
+        }, (res) => {
+            resolve(true);
+        });
+        req.on('error', () => {
+            resolve(false);
+        });
+        req.end();
+    });
 }
 
 async function main() {
@@ -36,25 +55,29 @@ async function main() {
     }
 
     try {
-        console.log('Starting Vite server...');
-        vite = spawn('npx', ['vite', '--open', 'false'], {
-            cwd: __dirname,
-            shell: true
-        });
-
+        const portActive = await isPortActive(3000);
         const viteUrl = 'http://localhost:3000';
-        
-        await new Promise((resolve, reject) => {
-            const startTimeout = setTimeout(() => {
-                reject(new Error('Vite server did not start in time'));
-            }, 30000);
-            vite.stdout.on('data', (data) => {
-                if (data.toString().includes('Local:') || data.toString().includes('ready in') || data.toString().includes('localhost:')) {
-                    clearTimeout(startTimeout);
-                    resolve();
-                }
+        if (portActive) {
+            console.log('Vite server already running on port 3000. Reusing...');
+        } else {
+            console.log('Starting Vite server...');
+            vite = spawn('npx', ['vite', '--open', 'false'], {
+                cwd: __dirname,
+                shell: true
             });
-        });
+
+            await new Promise((resolve, reject) => {
+                const startTimeout = setTimeout(() => {
+                    reject(new Error('Vite server did not start in time'));
+                }, 30000);
+                vite.stdout.on('data', (data) => {
+                    if (data.toString().includes('Local:') || data.toString().includes('ready in') || data.toString().includes('localhost:')) {
+                        clearTimeout(startTimeout);
+                        resolve();
+                    }
+                });
+            });
+        }
 
         console.log('Launching browser...');
         browser = await puppeteer.launch({
@@ -178,12 +201,20 @@ async function main() {
         // Check 3: Peer joining increments visitorCount to 2 and visitCount to 3
         console.log('Tab 2 joining room...');
         await page2.evaluate((room) => window.presence.joinRoom(room), testRoomName);
-        await sleep(3000);
-
+        
         const statsAfterPeer = await page2.evaluate(async (room) => {
             const fs = window._firestore;
-            const snap = await fs.getDoc(fs.doc(window.presence.db, 'artifacts', window.presence.appId, 'public', 'data', 'rooms', room));
-            const data = snap.data();
+            const docRef = fs.doc(window.presence.db, 'artifacts', window.presence.appId, 'public', 'data', 'rooms', room);
+            for (let i = 0; i < 20; i++) {
+                const snap = await fs.getDoc(docRef);
+                const data = snap.data();
+                if (data && data.visitorCount === 2 && data.visitCount === 3) {
+                    return { visitorCount: data.visitorCount, visitCount: data.visitCount };
+                }
+                await new Promise(r => setTimeout(r, 1000));
+            }
+            const snap = await fs.getDoc(docRef);
+            const data = snap.data() || {};
             return { visitorCount: data.visitorCount, visitCount: data.visitCount };
         }, testRoomName);
         console.log('Stats after peer join:', statsAfterPeer);
@@ -193,7 +224,13 @@ async function main() {
         // Check 4: Open Room Profile modal and verify it renders stats
         console.log('Checking Check 4 (Room Profile Render)...');
         await page2.evaluate((room) => window.spatialUI.openRoomProfile(room), testRoomName);
-        await sleep(2000);
+        
+        // Wait dynamically for page2 UI to render the correct values
+        await page2.waitForFunction(() => {
+            const visitors = document.getElementById('profile-stat-visitors')?.textContent;
+            const visits = document.getElementById('profile-stat-visits')?.textContent;
+            return visitors === '2' && visits === '3';
+        }, { timeout: 15000 }).catch(() => console.log('Check 4 UI rendering wait timed out.'));
 
         const profileRenderDetails = await page2.evaluate(() => {
             const modal = document.getElementById('room-profile-modal');

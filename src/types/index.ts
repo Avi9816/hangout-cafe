@@ -99,7 +99,14 @@ export interface RoomMemory {
     | 'object'
     | 'tape'
     | 'moment'
-    | 'whisper';
+    | 'whisper'
+    | 'quote'
+    | 'book_recommendation'
+    | 'currently_reading'
+    | 'rooftop_prompt'
+    | 'reflection'
+    | 'album_recommendation'
+    | 'listening_memory';
   title: string;
   description?: string;
   createdAt: number;

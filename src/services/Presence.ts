@@ -8,6 +8,7 @@ import { UserProfile, Note, MemoryObject, QueueItem, RoomHistoryEvent, RoomMemor
 import { $ } from '../utils/dom'; 
 import { debounce as debounceUtil } from '../utils/timing';
 import { devLog } from '../utils/logger';
+import { isPublicSpace } from '../config/spaceCapabilities';
 
 declare const __app_id: any;
 
@@ -125,6 +126,10 @@ export class SharedPresence {
 
     this.bus.on(APP_EVENTS.MEDIA_PLAY_REQUEST, (data: any) => {
         if(!this.userId || !db || !this.roomCode) return;
+        if (isPublicSpace(this.roomCode)) {
+            devLog('[MEDIA_CONTROL_BLOCKED] Media sync is not allowed in public spaces.');
+            return;
+        }
         const ref = doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode);
         if (data.type === 'spotify') {
             setDoc(ref, { state: { spotify: data.url, spotifyHost: this.profile?.alias || 'wanderer' } }, { merge: true });
@@ -140,48 +145,50 @@ export class SharedPresence {
             if (isUrlChanging || isHost) {
                 const hostId = isUrlChanging ? this.userId : currentVideo.hostId;
                 setDoc(ref, { 
-                    video: { 
-                        ...data, 
-                        hostId,
-                        host: this.profile?.alias || 'wanderer', 
-                        sender: this.userId 
-                    },
-                    currentTapeTitle: data.title || 'unnamed tape',
-                    currentHost: this.profile?.alias || 'wanderer',
-                    updatedAt: Date.now()
-                }, { merge: true });
-                
-                if (isUrlChanging) {
-                    const tapeTitle = data.title || 'unnamed tape';
-                    this.addHistoryEvent('tape_played', `Started playing tape "${tapeTitle}"`);
-                }
-                if (isUrlChanging && data.type === 'magnet') {
-                    this.broadcastActivity(`${this.profile?.alias || 'wanderer'} started a tape`, '📼');
-                }
-            } else {
-                devLog('[MEDIA_CONTROL_BLOCKED] Blocked non-host media control from:', this.userId);
-                const statusEl = $('wt-status');
-                if (statusEl) {
-                    statusEl.textContent = 'Only the host can control shared playback';
-                    setTimeout(() => {
-                        if (statusEl.textContent === 'Only the host can control shared playback') {
-                            statusEl.textContent = '';
-                        }
-                    }, 3000);
-                }
-            }
-        }
-    });
-
-    this.bus.on(APP_EVENTS.MEDIA_ENDED, (data: any) => {
-        devLog('[MEDIA_ENDED_RECEIVED]', data);
-        if (this.currentVideoState && this.currentVideoState.hostId === this.userId) {
-            devLog('[MEDIA_ENDED_RECEIVED] We are the host. Auto-advancing queue...');
-            this.playNextInQueue();
-        } else {
-            devLog('[MEDIA_ENDED_RECEIVED] We are not the host. Viewer ignores ended event.');
-        }
-    });
+                     video: { 
+                         ...data, 
+                         hostId,
+                         host: this.profile?.alias || 'wanderer', 
+                         sender: this.userId 
+                     },
+                     currentTapeTitle: data.title || 'unnamed tape',
+                     currentHost: this.profile?.alias || 'wanderer',
+                     updatedAt: Date.now()
+                 }, { merge: true });
+                 
+                 if (isUrlChanging) {
+                     const tapeTitle = data.title || 'unnamed tape';
+                     this.addHistoryEvent('tape_played', `Started playing tape "${tapeTitle}"`);
+                 }
+                 if (isUrlChanging && data.type === 'magnet') {
+                     this.broadcastActivity(`${this.profile?.alias || 'wanderer'} started a tape`, '📼');
+                 }
+             } else {
+                 devLog('[MEDIA_CONTROL_BLOCKED] Blocked non-host media control from:', this.userId);
+                 const statusEl = $('wt-status');
+                 if (statusEl) {
+                     statusEl.textContent = 'Only the host can control shared playback';
+                     setTimeout(() => {
+                         if (statusEl.textContent === 'Only the host can control shared playback') {
+                             statusEl.textContent = '';
+                         }
+                     }, 3000);
+                 }
+             }
+         }
+     });
+ 
+     this.bus.on(APP_EVENTS.MEDIA_ENDED, (data: any) => {
+         if(!this.userId || !db || !this.roomCode) return;
+         if (isPublicSpace(this.roomCode)) return;
+         devLog('[MEDIA_ENDED_RECEIVED]', data);
+         if (this.currentVideoState && this.currentVideoState.hostId === this.userId) {
+             devLog('[MEDIA_ENDED_RECEIVED] We are the host. Auto-advancing queue...');
+             this.playNextInQueue();
+         } else {
+             devLog('[MEDIA_ENDED_RECEIVED] We are not the host. Viewer ignores ended event.');
+         }
+     });
   }
 
   useFallbackUserId() {
@@ -398,7 +405,7 @@ export class SharedPresence {
     const roomRef = doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', roomKey);
     const visitorRef = doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', roomKey, 'visitors', this.userId);
 
-    runTransaction(db, async (transaction) => {
+    const executeTx = () => runTransaction(db!, async (transaction) => {
         const roomSnap = await transaction.get(roomRef);
         const visitorSnap = await transaction.get(visitorRef);
         
@@ -460,7 +467,24 @@ export class SharedPresence {
         }
 
         return { isNewRoom: !roomSnap.exists(), initialTheme, isNewVisitor };
-    }).then(({ isNewRoom, initialTheme, isNewVisitor }) => {
+    });
+
+    const runWithRetry = async (retries = 5): Promise<{ isNewRoom: boolean, initialTheme: string, isNewVisitor: boolean }> => {
+        for (let attempt = 1; attempt <= retries; attempt++) {
+            try {
+                return await executeTx() as { isNewRoom: boolean, initialTheme: string, isNewVisitor: boolean };
+            } catch (err: any) {
+                if (attempt === retries) {
+                    throw err;
+                }
+                devLog(`[ROOM_JOIN_TX] Transaction failed (attempt ${attempt}/${retries}), retrying: ` + (err.message || err));
+                await new Promise(r => setTimeout(r, 200 + Math.random() * 300 * attempt));
+            }
+        }
+        throw new Error('Transaction retries exhausted');
+    };
+
+    runWithRetry().then(({ isNewRoom, initialTheme, isNewVisitor }) => {
         if (isNewRoom) {
             this.addHistoryEvent('room_created', `Room created with theme "${initialTheme}"`);
         }
@@ -552,7 +576,7 @@ export class SharedPresence {
           }
         }
         
-        const isPublic = ['last-train', 'window-seat', 'between-pages', 'northern-lights'].includes(this.roomCode!);
+        const isPublic = isPublicSpace(this.roomCode!);
         if(data.theme) {
             devLog('[THEME_RESTORED]', data.theme);
             devLog('[ROOM_CHANGED_EMIT] listenToRoom sync theme:', { room: this.roomCode, isPrivate: !isPublic, theme: data.theme });
@@ -573,27 +597,36 @@ export class SharedPresence {
         devLog('[DEBUG_LISTEN_ROOM] Emitting REMOTE_OBJECTS_UPDATED (legacy)');
         this.bus.emit(APP_EVENTS.REMOTE_OBJECTS_UPDATED, this.objects);
         
-        if(data.state && data.state.spotify) this.bus.emit(APP_EVENTS.REMOTE_MEDIA_UPDATED, { type: 'spotify', url: data.state.spotify, host: data.state.spotifyHost });
+        if (!isPublic) {
+            if(data.state && data.state.spotify) this.bus.emit(APP_EVENTS.REMOTE_MEDIA_UPDATED, { type: 'spotify', url: data.state.spotify, host: data.state.spotifyHost });
 
-        if(data.video) {
-            const oldVideo = this.currentVideoState;
-            this.currentVideoState = data.video;
-            const hostEl = $('local-host');
-            if (hostEl) {
-                if (data.video.hostId === this.userId) {
-                    hostEl.textContent = 'You are controlling this tape';
-                } else {
-                    hostEl.textContent = `Watching with ${data.video.host || 'wanderer'}`;
+            if(data.video) {
+                const oldVideo = this.currentVideoState;
+                this.currentVideoState = data.video;
+                const hostEl = $('local-host');
+                if (hostEl) {
+                    if (data.video.hostId === this.userId) {
+                        hostEl.textContent = 'You are controlling this tape';
+                    } else {
+                        hostEl.textContent = `Watching with ${data.video.host || 'wanderer'}`;
+                    }
+                    hostEl.classList.add('visible');
                 }
-                hostEl.classList.add('visible');
+                const isUrlChanging = !oldVideo || oldVideo.url !== data.video.url;
+                if (data.video.sender !== this.userId || isUrlChanging) {
+                    this.isRemoteUpdate = true; 
+                    this.bus.emit(APP_EVENTS.REMOTE_MEDIA_UPDATED, data.video);
+                    setTimeout(() => this.isRemoteUpdate = false, 1500);
+                }
+                this.checkHostContinuity();
+            } else {
+                this.currentVideoState = null;
+                const hostEl = $('local-host');
+                if (hostEl) {
+                    hostEl.textContent = '';
+                    hostEl.classList.remove('visible');
+                }
             }
-            const isUrlChanging = !oldVideo || oldVideo.url !== data.video.url;
-            if (data.video.sender !== this.userId || isUrlChanging) {
-                this.isRemoteUpdate = true; 
-                this.bus.emit(APP_EVENTS.REMOTE_MEDIA_UPDATED, data.video);
-                setTimeout(() => this.isRemoteUpdate = false, 1500);
-            }
-            this.checkHostContinuity();
         } else {
             this.currentVideoState = null;
             const hostEl = $('local-host');
@@ -865,6 +898,10 @@ export class SharedPresence {
 
   async enqueueMedia(url: string, title: string) {
       if (!this.userId || !db || !this.roomCode) return;
+      if (isPublicSpace(this.roomCode)) {
+          devLog('[QUEUE_OPERATION] Enqueuing media is not allowed in public spaces.');
+          return;
+      }
       devLog('[QUEUE_OPERATION] Enqueuing media:', title, url);
       const queueCol = collection(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'queue');
       await addDoc(queueCol, {
@@ -884,6 +921,7 @@ export class SharedPresence {
 
   async startQueuedMedia(itemId: string) {
       if (!this.userId || !db || !this.roomCode) return;
+      if (isPublicSpace(this.roomCode)) return;
       if (this.currentVideoState && this.currentVideoState.hostId !== this.userId) {
           devLog('[QUEUE_OPERATION] Blocked non-host startQueuedMedia');
           return;
@@ -929,6 +967,7 @@ export class SharedPresence {
 
   async playNextInQueue() {
       if (!this.userId || !db || !this.roomCode) return;
+      if (isPublicSpace(this.roomCode)) return;
       if (this.currentVideoState && this.currentVideoState.hostId !== this.userId) {
           devLog('[QUEUE_OPERATION] Blocked non-host playNextInQueue');
           return;
@@ -987,6 +1026,7 @@ export class SharedPresence {
 
   checkHostContinuity(currentCount?: number): boolean {
       if (!this.userId || !db || !this.roomCode) return false;
+      if (isPublicSpace(this.roomCode)) return false;
       if (this.currentVideoState && this.currentVideoState.hostId) {
           const currentHostId = this.currentVideoState.hostId;
           if (!this.activeUsers[currentHostId]) {
@@ -1006,34 +1046,52 @@ export class SharedPresence {
                       devLog('[HOST_CONTINUITY] We are the oldest active participant. Initiating takeover...');
                       const fs = db;
                       const roomRef = doc(fs, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode);
-                      runTransaction(fs, async (transaction) => {
-                          const roomDoc = await transaction.get(roomRef);
-                          if (roomDoc.exists()) {
-                              const currentVideo = roomDoc.data().video;
-                              if (currentVideo && currentVideo.hostId === currentHostId) {
-                                  devLog('[HOST_CONTINUITY] Takeover conditions met. Claiming host authority...');
-                                  const updatePayload: any = {
-                                      'video.hostId': this.userId,
-                                      'video.host': this.profile?.alias || 'wanderer',
-                                      'video.sender': this.userId,
-                                      currentHost: this.profile?.alias || 'wanderer',
-                                      updatedAt: Date.now()
-                                  };
-                                  if (typeof currentCount === 'number') {
-                                      updatePayload.activeCount = currentCount;
-                                      updatePayload.lastActiveAt = Date.now();
-                                  }
-                                  transaction.update(roomRef, updatePayload);
-                              } else {
-                                  devLog('[HOST_CONTINUITY] Takeover aborted: hostId already changed.');
-                              }
-                          }
-                      }).then(() => {
-                          devLog('[HOST_CONTINUITY] Takeover transaction completed successfully.');
-                          this.addHistoryEvent('host_changed', `Host authority transferred to ${this.profile?.alias || 'wanderer'}`);
-                      }).catch(err => {
-                          console.error('[HOST_CONTINUITY] Takeover transaction failed:', err);
-                      });
+                      
+                      const executeTakeoverTx = () => runTransaction(fs, async (transaction) => {
+                           const roomDoc = await transaction.get(roomRef);
+                           if (roomDoc.exists()) {
+                               const currentVideo = roomDoc.data().video;
+                               if (currentVideo && currentVideo.hostId === currentHostId) {
+                                   devLog('[HOST_CONTINUITY] Takeover conditions met. Claiming host authority...');
+                                   const updatePayload: any = {
+                                       'video.hostId': this.userId,
+                                       'video.host': this.profile?.alias || 'wanderer',
+                                       'video.sender': this.userId,
+                                       currentHost: this.profile?.alias || 'wanderer',
+                                       updatedAt: Date.now()
+                                   };
+                                   if (typeof currentCount === 'number') {
+                                       updatePayload.activeCount = currentCount;
+                                       updatePayload.lastActiveAt = Date.now();
+                                   }
+                                   transaction.update(roomRef, updatePayload);
+                               } else {
+                                   devLog('[HOST_CONTINUITY] Takeover aborted: hostId already changed.');
+                               }
+                           }
+                       });
+
+                       const runTakeoverWithRetry = async (retries = 5) => {
+                           for (let attempt = 1; attempt <= retries; attempt++) {
+                               try {
+                                   await executeTakeoverTx();
+                                   return;
+                               } catch (err: any) {
+                                   if (attempt === retries) {
+                                       throw err;
+                                   }
+                                   devLog(`[HOST_CONTINUITY_TX] Takeover failed (attempt ${attempt}/${retries}), retrying: ` + (err.message || err));
+                                   await new Promise(r => setTimeout(r, 200 + Math.random() * 300 * attempt));
+                               }
+                           }
+                       };
+
+                       runTakeoverWithRetry().then(() => {
+                           devLog('[HOST_CONTINUITY] Takeover transaction completed successfully.');
+                           this.addHistoryEvent('host_changed', `Host authority transferred to ${this.profile?.alias || 'wanderer'}`);
+                       }).catch(err => {
+                           console.error('[HOST_CONTINUITY] Takeover transaction failed:', err);
+                       });
                       return true;
                   }
               }
@@ -1060,12 +1118,13 @@ export class SharedPresence {
       if (!this.userId || !db || !this.roomCode) return;
       devLog('[ROOM_MEMORIES] Saving memory:', memory);
       const memoriesCol = collection(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'memories');
+      const createdBy = (memory.payload && memory.payload.anonymous) ? 'Someone' : (this.profile?.alias || 'wanderer');
       await addDoc(memoriesCol, {
           type: memory.type,
           title: memory.title,
           description: memory.description || '',
           createdAt: Date.now(),
-          createdBy: this.profile?.alias || 'wanderer',
+          createdBy,
           creatorUid: this.userId,
           payload: memory.payload
       }).then(() => {

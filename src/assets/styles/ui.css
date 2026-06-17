@@ -814,6 +814,11 @@ h2 { font-family: var(--font-ui); font-size: clamp(1.8rem, 6vw, 2.2rem); font-we
     align-items: start;
   }
 
+  #public-activity-section {
+    grid-area: media;
+    margin-top: 20px;
+  }
+
   #media-module {
     grid-area: media;
     margin-top: 20px;

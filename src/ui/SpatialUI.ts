@@ -10,6 +10,7 @@ import { ROOM_CONFIG } from '../constants/app';
 import { getIcon } from './icons';
 import { getRoomSoul } from '../utils/roomSoul';
 import { getRoomEchoes } from '../utils/roomEchoes';
+import { getSpaceCapabilities, getPublicSpaceActivityConfig } from '../config/spaceCapabilities';
 
 function formatTimeAgo(timestamp: number): string {
     const seconds = Math.floor((Date.now() - timestamp) / 1000);
@@ -110,6 +111,7 @@ export class SpatialUI {
                   const activeTab = activeTabBtn ? activeTabBtn.getAttribute('data-explore-tab') || 'active' : 'active';
                   this.loadAndRenderExploreRooms(activeTab);
               }
+              this.configureSpaceCapabilities(data.room);
           }
       });
       this.bus.on(APP_EVENTS.ROOM_PROFILE_REQUEST, (roomCode: string) => {
@@ -1045,6 +1047,26 @@ export class SpatialUI {
             iconName = 'pushpin';
             leftBorderColor = 'rgba(244, 211, 94, 0.6)'; // warm yellow
             rowBg = 'rgba(244, 211, 94, 0.02)';
+        } else if (item.type === 'book_recommendation' || item.type === 'currently_reading') {
+            iconName = 'book';
+            leftBorderColor = 'rgba(244, 211, 94, 0.6)'; // warm yellow
+            rowBg = 'rgba(244, 211, 94, 0.02)';
+        } else if (item.type === 'quote') {
+            iconName = 'note';
+            leftBorderColor = 'rgba(245, 158, 11, 0.6)'; // orange
+            rowBg = 'rgba(245, 158, 11, 0.02)';
+        } else if (item.type === 'rooftop_prompt') {
+            iconName = 'coffee';
+            leftBorderColor = 'rgba(56, 189, 248, 0.6)'; // sky blue
+            rowBg = 'rgba(56, 189, 248, 0.02)';
+        } else if (item.type === 'reflection') {
+            iconName = 'aurora';
+            leftBorderColor = 'rgba(168, 85, 247, 0.6)'; // purple
+            rowBg = 'rgba(168, 85, 247, 0.02)';
+        } else if (item.type === 'album_recommendation' || item.type === 'listening_memory') {
+            iconName = 'vhs';
+            leftBorderColor = 'rgba(239, 68, 68, 0.6)'; // rose
+            rowBg = 'rgba(239, 68, 68, 0.02)';
         } else if (item.type === 'object') {
             const emojiMap: Record<string, string> = {
                 '☕': 'coffee',
@@ -1154,7 +1176,8 @@ export class SpatialUI {
                 $('photo-wall-section')?.scrollIntoView({ behavior: 'smooth' });
             }
         });
-        if (item.type !== 'object') {
+        const nonRestorableTypes = ['object', 'quote', 'book_recommendation', 'currently_reading', 'rooftop_prompt', 'reflection', 'album_recommendation', 'listening_memory'];
+        if (!nonRestorableTypes.includes(item.type)) {
             actionsDiv.appendChild(restoreBtn);
         }
 
@@ -1927,6 +1950,411 @@ export class SpatialUI {
     this.currentMetadata = null;
     this.renderEchoes();
 
+    const activitySection = $('public-activity-section');
+    if (activitySection) {
+        activitySection.style.display = 'none';
+        activitySection.innerHTML = '';
+    }
+
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  configureSpaceCapabilities(roomCode: string) {
+    const caps = getSpaceCapabilities(roomCode);
+    
+    // 1. Media Sync visibility
+    const mediaModule = $('media-module');
+    if (mediaModule) {
+      mediaModule.style.display = caps.allowsMediaSync ? '' : 'none';
+    }
+
+    // 2. Photo Wall visibility
+    const photoWall = $('photo-wall-section');
+    if (photoWall) {
+      photoWall.style.display = caps.allowsPhotos ? '' : 'none';
+    }
+
+    // 3. Public Activity Section visibility
+    const activitySection = $('public-activity-section');
+    if (activitySection) {
+      if (caps.allowsPublicActivities) {
+        activitySection.style.display = '';
+        this.renderPublicActivitySection(roomCode);
+      } else {
+        activitySection.style.display = 'none';
+        activitySection.innerHTML = '';
+      }
+    }
+  }
+
+  renderPublicActivitySection(roomCode: string) {
+    const container = $('public-activity-section');
+    if (!container) return;
+
+    const config = getPublicSpaceActivityConfig(roomCode);
+    if (!config) {
+      container.style.display = 'none';
+      return;
+    }
+
+    container.innerHTML = '';
+
+    // Title & Subtitle
+    const heading = createSafeElement('h2', 'section-heading', config.title);
+    const subtitle = createSafeElement('p', 'subtitle', config.subtitle);
+    subtitle.style.marginBottom = '20px';
+    container.appendChild(heading);
+    container.appendChild(subtitle);
+
+    // Active Prompt Box
+    const promptContainer = createSafeElement('div', 'activity-prompt-card');
+    promptContainer.style.background = 'rgba(255,255,255,0.02)';
+    promptContainer.style.border = '1px solid rgba(255,255,255,0.05)';
+    promptContainer.style.padding = '20px';
+    promptContainer.style.borderRadius = '8px';
+    promptContainer.style.marginBottom = '24px';
+    promptContainer.style.display = 'flex';
+    promptContainer.style.flexDirection = 'column';
+    promptContainer.style.gap = '12px';
+
+    const promptTitle = createSafeElement('span', '', 'Active Prompt');
+    promptTitle.style.fontSize = '0.75rem';
+    promptTitle.style.textTransform = 'uppercase';
+    promptTitle.style.letterSpacing = '1px';
+    promptTitle.style.color = 'var(--accent)';
+    promptTitle.style.fontWeight = '600';
+    promptContainer.appendChild(promptTitle);
+
+    // Prompt Text
+    let activePromptIndex = config.defaultPromptIndex;
+    const promptText = createSafeElement('p', '', config.prompts[activePromptIndex].text);
+    promptText.style.fontSize = '1.05rem';
+    promptText.style.margin = '0';
+    promptText.style.fontFamily = 'var(--font-serif)';
+    promptText.style.fontStyle = 'italic';
+    promptText.style.lineHeight = '1.4';
+    promptContainer.appendChild(promptText);
+
+    // Cycle Prompt Button
+    const cycleBtn = createSafeElement('button', 'text-btn', 'cycle prompt');
+    cycleBtn.style.fontSize = '0.7rem';
+    cycleBtn.style.alignSelf = 'flex-start';
+    cycleBtn.style.padding = '4px 8px';
+    cycleBtn.addEventListener('click', () => {
+      this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'soft_click');
+      activePromptIndex = (activePromptIndex + 1) % config.prompts.length;
+      promptText.textContent = config.prompts[activePromptIndex].text;
+    });
+    promptContainer.appendChild(cycleBtn);
+    container.appendChild(promptContainer);
+
+    // Form Section based on Space
+    const formContainer = createSafeElement('div', 'activity-form-container');
+    formContainer.style.display = 'flex';
+    formContainer.style.flexDirection = 'column';
+    formContainer.style.gap = '16px';
+    container.appendChild(formContainer);
+
+    this.renderSpaceSpecificForm(roomCode, formContainer, () => config.prompts[activePromptIndex].text);
+  }
+
+  renderSpaceSpecificForm(roomCode: string, parent: HTMLElement, getActivePrompt: () => string) {
+    const presence = (window as any).presence;
+    if (!presence) return;
+
+    if (roomCode === 'between-pages') {
+      const tabRow = createSafeElement('div', 'media-tabs');
+      tabRow.style.marginBottom = '12px';
+      const tabBook = createSafeElement('button', 'media-tab active', 'Recommend Book');
+      const tabQuote = createSafeElement('button', 'media-tab', 'Share Quote');
+      const tabReading = createSafeElement('button', 'media-tab', 'Currently Reading');
+      tabRow.appendChild(tabBook);
+      tabRow.appendChild(tabQuote);
+      tabRow.appendChild(tabReading);
+      parent.appendChild(tabRow);
+
+      const formContent = createSafeElement('div');
+      parent.appendChild(formContent);
+
+      let activeSubTab = 'book';
+      const renderFormContent = () => {
+        formContent.innerHTML = '';
+        if (activeSubTab === 'book') {
+          const titleInput = createSafeElement('input', 'ethereal-input') as HTMLInputElement;
+          titleInput.placeholder = 'Book Title';
+          titleInput.maxLength = 50;
+
+          const authorInput = createSafeElement('input', 'ethereal-input') as HTMLInputElement;
+          authorInput.placeholder = 'Author';
+          authorInput.maxLength = 50;
+
+          const reviewInput = createSafeElement('input', 'ethereal-input') as HTMLInputElement;
+          reviewInput.placeholder = 'Why you recommend it / your thoughts...';
+          reviewInput.maxLength = 140;
+
+          const submitBtn = createSafeElement('button', 'text-btn', 'Recommend Book');
+          submitBtn.addEventListener('click', async () => {
+            const title = titleInput.value.trim();
+            const author = authorInput.value.trim();
+            const review = reviewInput.value.trim();
+            if (!title || !author || !review) return;
+
+            this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'paper_pin');
+            await presence.saveMemory({
+              type: 'book_recommendation',
+              title: title,
+              description: `by ${author}`,
+              payload: { title, author, review, prompt: getActivePrompt() }
+            });
+            titleInput.value = '';
+            authorInput.value = '';
+            reviewInput.value = '';
+          });
+
+          formContent.appendChild(titleInput);
+          formContent.appendChild(authorInput);
+          formContent.appendChild(reviewInput);
+          formContent.appendChild(submitBtn);
+        } else if (activeSubTab === 'quote') {
+          const quoteInput = createSafeElement('input', 'ethereal-input') as HTMLInputElement;
+          quoteInput.placeholder = 'Share a passage or quote...';
+          quoteInput.maxLength = 140;
+
+          const authorInput = createSafeElement('input', 'ethereal-input') as HTMLInputElement;
+          authorInput.placeholder = 'Book / Author reference';
+          authorInput.maxLength = 50;
+
+          const submitBtn = createSafeElement('button', 'text-btn', 'Share Quote');
+          submitBtn.addEventListener('click', async () => {
+            const quote = quoteInput.value.trim();
+            const author = authorInput.value.trim();
+            if (!quote || !author) return;
+
+            this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'paper_pin');
+            await presence.saveMemory({
+              type: 'quote',
+              title: quote.length > 30 ? quote.substring(0, 27) + '...' : quote,
+              description: `— ${author}`,
+              payload: { text: quote, author, prompt: getActivePrompt() }
+            });
+            quoteInput.value = '';
+            authorInput.value = '';
+          });
+
+          formContent.appendChild(quoteInput);
+          formContent.appendChild(authorInput);
+          formContent.appendChild(submitBtn);
+        } else if (activeSubTab === 'reading') {
+          const titleInput = createSafeElement('input', 'ethereal-input') as HTMLInputElement;
+          titleInput.placeholder = 'What book are you reading?';
+          titleInput.maxLength = 50;
+
+          const statusInput = createSafeElement('input', 'ethereal-input') as HTMLInputElement;
+          statusInput.placeholder = 'Current thoughts or progress...';
+          statusInput.maxLength = 100;
+
+          const submitBtn = createSafeElement('button', 'text-btn', 'Share Update');
+          submitBtn.addEventListener('click', async () => {
+            const title = titleInput.value.trim();
+            const status = statusInput.value.trim();
+            if (!title || !status) return;
+
+            this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'paper_pin');
+            await presence.saveMemory({
+              type: 'currently_reading',
+              title: `Reading: ${title}`,
+              description: status,
+              payload: { title, thoughts: status, prompt: getActivePrompt() }
+            });
+            titleInput.value = '';
+            statusInput.value = '';
+          });
+
+          formContent.appendChild(titleInput);
+          formContent.appendChild(statusInput);
+          formContent.appendChild(submitBtn);
+        }
+      };
+
+      const switchSubTab = (tab: string) => {
+        activeSubTab = tab;
+        tabBook.className = tab === 'book' ? 'media-tab active' : 'media-tab';
+        tabQuote.className = tab === 'quote' ? 'media-tab active' : 'media-tab';
+        tabReading.className = tab === 'reading' ? 'media-tab active' : 'media-tab';
+        this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'soft_click');
+        renderFormContent();
+      };
+
+      tabBook.addEventListener('click', () => switchSubTab('book'));
+      tabQuote.addEventListener('click', () => switchSubTab('quote'));
+      tabReading.addEventListener('click', () => switchSubTab('reading'));
+
+      renderFormContent();
+    } else if (roomCode === 'window-seat') {
+      const thoughtInput = createSafeElement('input', 'ethereal-input') as HTMLInputElement;
+      thoughtInput.placeholder = 'Share a passing thought or answer the active prompt...';
+      thoughtInput.maxLength = 120;
+
+      const submitBtn = createSafeElement('button', 'text-btn', 'Send into the night');
+      submitBtn.addEventListener('click', async () => {
+        const text = thoughtInput.value.trim();
+        if (!text) return;
+
+        this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'paper_pin');
+        await presence.saveMemory({
+          type: 'rooftop_prompt',
+          title: text.length > 30 ? text.substring(0, 27) + '...' : text,
+          description: 'Passing thought on the Rooftop',
+          payload: { text, prompt: getActivePrompt() }
+        });
+        thoughtInput.value = '';
+      });
+
+      parent.appendChild(thoughtInput);
+      parent.appendChild(submitBtn);
+    } else if (roomCode === 'northern-lights') {
+      const reflectionInput = document.createElement('textarea');
+      reflectionInput.className = 'ethereal-input';
+      reflectionInput.placeholder = 'Write down a quiet reflection...';
+      reflectionInput.maxLength = 200;
+      reflectionInput.style.height = '80px';
+      reflectionInput.style.padding = '10px';
+      reflectionInput.style.resize = 'none';
+
+      const anonRow = createSafeElement('div');
+      anonRow.style.display = 'flex';
+      anonRow.style.alignItems = 'center';
+      anonRow.style.gap = '8px';
+      anonRow.style.fontSize = '0.8rem';
+      anonRow.style.opacity = '0.8';
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.id = 'activity-anon-toggle';
+      checkbox.style.cursor = 'pointer';
+
+      const label = createSafeElement('label', '', 'Post anonymously');
+      label.setAttribute('for', 'activity-anon-toggle');
+      label.style.cursor = 'pointer';
+
+      anonRow.appendChild(checkbox);
+      anonRow.appendChild(label);
+
+      const submitBtn = createSafeElement('button', 'text-btn', 'Share reflection');
+      submitBtn.addEventListener('click', async () => {
+        const text = reflectionInput.value.trim();
+        if (!text) return;
+
+        const isAnonymous = checkbox.checked;
+        this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'paper_pin');
+        await presence.saveMemory({
+          type: 'reflection',
+          title: text.length > 30 ? text.substring(0, 27) + '...' : text,
+          description: isAnonymous ? 'An anonymous reflection' : 'A reflection',
+          payload: { text, anonymous: isAnonymous, prompt: getActivePrompt() }
+        });
+        reflectionInput.value = '';
+        checkbox.checked = false;
+      });
+
+      parent.appendChild(reflectionInput);
+      parent.appendChild(anonRow);
+      parent.appendChild(submitBtn);
+    } else if (roomCode === 'last-train') {
+      const tabRow = createSafeElement('div', 'media-tabs');
+      tabRow.style.marginBottom = '12px';
+      const tabAlbum = createSafeElement('button', 'media-tab active', 'Recommend Album');
+      const tabSong = createSafeElement('button', 'media-tab', 'Share Music Memory');
+      tabRow.appendChild(tabAlbum);
+      tabRow.appendChild(tabSong);
+      parent.appendChild(tabRow);
+
+      const formContent = createSafeElement('div');
+      parent.appendChild(formContent);
+
+      let activeSubTab = 'album';
+      const renderFormContent = () => {
+        formContent.innerHTML = '';
+        if (activeSubTab === 'album') {
+          const albumInput = createSafeElement('input', 'ethereal-input') as HTMLInputElement;
+          albumInput.placeholder = 'Album Name';
+          albumInput.maxLength = 50;
+
+          const artistInput = createSafeElement('input', 'ethereal-input') as HTMLInputElement;
+          artistInput.placeholder = 'Artist';
+          artistInput.maxLength = 50;
+
+          const thoughtsInput = createSafeElement('input', 'ethereal-input') as HTMLInputElement;
+          thoughtsInput.placeholder = 'Why it belongs in the corner...';
+          thoughtsInput.maxLength = 140;
+
+          const submitBtn = createSafeElement('button', 'text-btn', 'Add to shelves');
+          submitBtn.addEventListener('click', async () => {
+            const album = albumInput.value.trim();
+            const artist = artistInput.value.trim();
+            const thoughts = thoughtsInput.value.trim();
+            if (!album || !artist || !thoughts) return;
+
+            this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'paper_pin');
+            await presence.saveMemory({
+              type: 'album_recommendation',
+              title: album,
+              description: `by ${artist}`,
+              payload: { album, artist, thoughts, prompt: getActivePrompt() }
+            });
+            albumInput.value = '';
+            artistInput.value = '';
+            thoughtsInput.value = '';
+          });
+
+          formContent.appendChild(albumInput);
+          formContent.appendChild(artistInput);
+          formContent.appendChild(thoughtsInput);
+          formContent.appendChild(submitBtn);
+        } else if (activeSubTab === 'song') {
+          const songInput = createSafeElement('input', 'ethereal-input') as HTMLInputElement;
+          songInput.placeholder = 'Song / Album reference';
+          songInput.maxLength = 50;
+
+          const memoryInput = createSafeElement('input', 'ethereal-input') as HTMLInputElement;
+          memoryInput.placeholder = 'Your memory or feeling associated with it...';
+          memoryInput.maxLength = 140;
+
+          const submitBtn = createSafeElement('button', 'text-btn', 'Pin Memory');
+          submitBtn.addEventListener('click', async () => {
+            const song = songInput.value.trim();
+            const memoryText = memoryInput.value.trim();
+            if (!song || !memoryText) return;
+
+            this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'paper_pin');
+            await presence.saveMemory({
+              type: 'listening_memory',
+              title: song,
+              description: memoryText,
+              payload: { songOrAlbum: song, memory: memoryText, prompt: getActivePrompt() }
+            });
+            songInput.value = '';
+            memoryInput.value = '';
+          });
+
+          formContent.appendChild(songInput);
+          formContent.appendChild(memoryInput);
+          formContent.appendChild(submitBtn);
+        }
+      };
+
+      const switchSubTab = (tab: string) => {
+        activeSubTab = tab;
+        tabAlbum.className = tab === 'album' ? 'media-tab active' : 'media-tab';
+        tabSong.className = tab === 'song' ? 'media-tab active' : 'media-tab';
+        this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'soft_click');
+        renderFormContent();
+      };
+
+      tabAlbum.addEventListener('click', () => switchSubTab('album'));
+      tabSong.addEventListener('click', () => switchSubTab('song'));
+
+      renderFormContent();
+    }
   }
 }
