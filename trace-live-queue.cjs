@@ -1,11 +1,30 @@
 const puppeteer = require('puppeteer-core');
 const { spawn, execSync } = require('child_process');
 const path = require('path');
+const http = require('http');
 
 const CHROME_PATH = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function isPortActive(port) {
+    return new Promise((resolve) => {
+        const req = http.request({
+            host: 'localhost',
+            port: port,
+            path: '/',
+            method: 'GET',
+            timeout: 1000
+        }, (res) => {
+            resolve(true);
+        });
+        req.on('error', () => {
+            resolve(false);
+        });
+        req.end();
+    });
 }
 
 async function main() {
@@ -45,25 +64,30 @@ async function main() {
     }
 
     try {
-        console.log('Starting Vite server...');
-        vite = spawn('npx', ['vite', '--open', 'false'], {
-            cwd: __dirname,
-            shell: true
-        });
+        const portActive = await isPortActive(3000);
+        if (portActive) {
+            console.log('Vite server already running on port 3000, skipping spawn...');
+        } else {
+            console.log('Starting Vite server...');
+            vite = spawn('npx', ['vite', '--open', 'false'], {
+                cwd: __dirname,
+                shell: true
+            });
+
+            await new Promise((resolve, reject) => {
+                const startTimeout = setTimeout(() => {
+                    reject(new Error('Vite server did not start in time'));
+                }, 30000);
+                vite.stdout.on('data', (data) => {
+                    if (data.toString().includes('Local:') || data.toString().includes('ready in') || data.toString().includes('localhost:')) {
+                        clearTimeout(startTimeout);
+                        resolve();
+                    }
+                });
+            });
+        }
 
         const viteUrl = 'http://localhost:3000';
-        
-        await new Promise((resolve, reject) => {
-            const startTimeout = setTimeout(() => {
-                reject(new Error('Vite server did not start in time'));
-            }, 30000);
-            vite.stdout.on('data', (data) => {
-                if (data.toString().includes('Local:') || data.toString().includes('ready in') || data.toString().includes('localhost:')) {
-                    clearTimeout(startTimeout);
-                    resolve();
-                }
-            });
-        });
 
         console.log('Launching browser...');
         browser = await puppeteer.launch({

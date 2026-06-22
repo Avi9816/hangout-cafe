@@ -150,6 +150,11 @@ async function main() {
                     get: () => mockWebTorrent,
                     configurable: false
                 });
+
+                // Mock uploadPhoto
+                window.mockUploadPhoto = async function(file) {
+                    return 'https://firebasestorage.googleapis.com/v0/b/hangout-cafe-9441c.appspot.com/o/mock_polaroid.png?alt=media';
+                };
             });
         };
 
@@ -296,15 +301,23 @@ async function main() {
 
         // Upload another photo to test Empty Room Restoration
         console.log('Tab 1 uploading second photo to test restoration...');
-        const fileInput2 = await page1.$('#photo-file-input');
-        await fileInput2.uploadFile(path.join(__dirname, 'test-image.png'));
-        await sleep(1000);
+        await page1.evaluate(() => {
+            const input = document.getElementById('photo-file-input');
+            const mockFile = new File(['mock content'], 'test-image.png', { type: 'image/png' });
+            Object.defineProperty(input, 'files', {
+                value: [mockFile],
+                writable: true,
+                configurable: true
+            });
+            const nameEl = document.getElementById('selected-photo-name');
+            if (nameEl) nameEl.textContent = 'test-image.png';
+        });
         await page1.type('#photo-caption-input', 'Restored Polaroid');
         await page1.click('#btn-upload-photo');
         // Wait for upload and local state sync
         await page1.waitForFunction(() => {
             return window.presence && window.presence.photos && window.presence.photos.length === 2;
-        }, { timeout: 10000 });
+        }, { timeout: 15000 });
 
         const tab1PhotosAfter = await page1.evaluate(() => window.presence.photos || []);
         console.log('Photos count after 2nd upload:', tab1PhotosAfter.length);

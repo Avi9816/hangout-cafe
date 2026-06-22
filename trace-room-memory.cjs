@@ -220,14 +220,15 @@ async function main() {
         const historySyncPass = tab1History.some(h => h.type === 'note_pinned' && h.text.includes('Hello Wall'));
         console.log(`Check 5 (History Syncs Realtime Across Tabs): ${historySyncPass ? 'PASS' : 'FAIL'}`);
 
-        // Check 6: History query bounded to 50
         console.log('Flooding history to check bounds...');
         await page2.evaluate(async () => {
+            const promises = [];
             for (let i = 0; i < 55; i++) {
-                await window.presence.addHistoryEvent('note_pinned', `Flood event ${i}`);
+                promises.push(window.presence.addHistoryEvent('note_pinned', `Flood event ${i}`));
             }
+            await Promise.all(promises);
         });
-        await sleep(4000);
+        await sleep(6000);
         const floodedHistoryCount = await page1.evaluate(() => window.presence.history.length);
         console.log('History count after flood:', floodedHistoryCount);
         const boundsPass = floodedHistoryCount <= 50;

@@ -187,6 +187,7 @@ async function runVerification() {
 
   console.log("All verification screenshots taken successfully.");
   await browser.close();
+  process.exit(0);
 }
 
 runVerification().catch(err => {

@@ -515,10 +515,12 @@ export class SharedPresence {
     if(!this.userId || !db || !this.profile || !this.roomCode) return;
     devLog('[FIRESTORE_ROOM_WRITE] updatePresence start');
     const activeCount = Object.keys(this.activeUsers).length || 1;
+    const isPublic = isPublicSpace(this.roomCode);
     setDoc(doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode), { 
         presence: { [this.userId]: { alias: this.profile.alias, time: Date.now() } },
         lastActiveAt: Date.now(),
-        activeCount: activeCount
+        activeCount: activeCount,
+        isPrivate: !isPublic
     }, { merge: true })
       .then(() => devLog('[FIRESTORE_ROOM_WRITE] updatePresence SUCCESS'))
       .catch(err => console.error('[FIRESTORE_ROOM_WRITE] updatePresence ERROR:', err));
@@ -1345,7 +1347,10 @@ export class SharedPresence {
           q = query(roomsCol, orderBy('lastActiveAt', 'desc'), limit(20));
       }
 
-      const snap = await getDocs(q).catch(() => null);
+      const snap = await getDocs(q).catch((err) => {
+          console.error('[loadExploreRooms ERR]', tab, err);
+          return null;
+      });
       if (!snap) return [];
 
       let rooms = snap.docs.map(doc => {

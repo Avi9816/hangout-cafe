@@ -1,15 +1,43 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
+
+    // Helper: Checks if roomCode is a public space.
+    // Mirrors the isPublicSpace() list in src/config/spaceCapabilities.ts.
+    function isPublicSpace(roomCode) {
+      return roomCode in ['between-pages', 'window-seat', 'northern-lights', 'last-train'];
+    }
+
     match /photos/{roomCode}/{photoId} {
       allow read: if true;
-      allow write: if request.auth != null
-        && (request.resource == null || (request.resource.size < 5 * 1024 * 1024 && request.resource.contentType.matches('image/.*')));
+
+      // CREATE: Authenticated users only, not a public space, must be an image < 5MB.
+      // Public spaces block photo uploads both here (Storage) and in firestore.rules (Firestore doc).
+      allow create: if request.auth != null
+        && !isPublicSpace(roomCode)
+        && request.resource != null
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+
+      // UPDATE: Never allowed — photos are immutable once uploaded.
+      allow update: if false;
+
+      // DELETE: Blocked at Storage level. Open follow-up risk.
+      // The app calls uploadBytes() without custom metadata containing creatorUid.
+      // Storage Rules have no cross-service Firestore lookup capability, so ownership
+      // cannot be verified here. The app only removes the Firestore photo doc via
+      // deletePhoto() — it does not delete the Storage file. Firestore-level
+      // creator-only delete is enforced separately in firestore.rules.
+      // To enable owner-based Storage delete in a future phase: attach
+      // { customMetadata: { creatorUid: uid } } in the uploadBytes() call, then
+      // check resource.metadata['creatorUid'] == request.auth.uid here.
+      allow delete: if false;
     }
 
     match /avatars/{userId}/{fileName} {
       allow read: if true;
-      allow create, update: if request.auth != null && request.auth.uid == userId
+      allow create, update: if request.auth != null
+        && request.auth.uid == userId
         && request.resource != null
         && request.resource.size < 2 * 1024 * 1024
         && request.resource.contentType.matches('image/.*');

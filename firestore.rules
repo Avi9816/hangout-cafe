@@ -12,6 +12,166 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
+    // Helper: Checks if roomCode is a public space.
+    // Mirrors the isPublicSpace() list in src/config/spaceCapabilities.ts.
+    function isPublicSpace(roomCode) {
+      return roomCode in ['between-pages', 'window-seat', 'northern-lights', 'last-train'];
+    }
+
+    // Helper: Validates a prompt value (can be a plain string or a prompt map/object).
+    // - If it is a string, its size must be <= 280.
+    // - If it is a map, it must contain only 'id' and 'text', where 'id' is a string <= 80
+    //   and 'text' is a string <= 280.
+    function isValidPrompt(p) {
+      return (p is string && p.size() > 0 && p.size() <= 280) ||
+             (p is map && p.keys().hasOnly(['id', 'text']) &&
+              p.id is string && p.id.size() > 0 && p.id.size() <= 80 &&
+              p.text is string && p.text.size() > 0 && p.text.size() <= 280);
+    }
+
+    // Helper: Validates payload shape per memory type.
+    // - Legacy types (note, object, tape, whisper): payload must match exact key set.
+    // - moment: legacy read-only type, no new writes; allow without payload restriction.
+    // - Public activity types: payload is REQUIRED and must contain all expected keys.
+    //   payload == null is NOT accepted for public activity types.
+    // - prompt is always optional and is a plain string when present.
+    function isValidPayload(type, payload) {
+      return (
+        type == 'note'
+          && payload is map
+          && payload.keys().hasOnly(['text', 'author'])
+          && payload.text is string && payload.text.size() >= 1 && payload.text.size() <= 280
+          && payload.author is string && payload.author.size() >= 1 && payload.author.size() <= 80
+      ) || (
+        type == 'object'
+          && payload is map
+          && payload.keys().hasOnly(['emoji', 'label', 'author'])
+          && payload.emoji is string && payload.emoji.size() >= 1 && payload.emoji.size() <= 10
+          && payload.label is string && payload.label.size() >= 1 && payload.label.size() <= 80
+          && payload.author is string && payload.author.size() >= 1 && payload.author.size() <= 80
+      ) || (
+        type == 'tape'
+          && payload is map
+          && payload.keys().hasOnly(['url', 'title', 'type'])
+          && payload.url is string && payload.url.size() >= 1 && payload.url.size() <= 2048
+          && payload.title is string && payload.title.size() >= 1 && payload.title.size() <= 80
+          && payload.type in ['youtube', 'magnet']
+      ) || (
+        type == 'whisper'
+          && payload is map
+          && payload.keys().hasOnly(['text'])
+          && payload.text is string && payload.text.size() >= 1 && payload.text.size() <= 280
+      ) || (
+        // moment: legacy read-only type. No new app code creates this type.
+        // Allow without payload restriction to preserve old document compatibility.
+        type == 'moment'
+      ) || (
+        // --- Public activity types: payload is REQUIRED with exact key shapes ---
+        type == 'quote'
+          && payload is map
+          && payload.keys().hasAll(['text', 'author'])
+          && payload.keys().hasOnly(['text', 'author', 'prompt'])
+          && payload.text is string && payload.text.size() >= 1 && payload.text.size() <= 280
+          && payload.author is string && payload.author.size() >= 1 && payload.author.size() <= 80
+          && (!('prompt' in payload) || isValidPrompt(payload.prompt))
+      ) || (
+        type == 'book_recommendation'
+          && payload is map
+          && payload.keys().hasAll(['title', 'author', 'review'])
+          && payload.keys().hasOnly(['title', 'author', 'review', 'prompt'])
+          && payload.title is string && payload.title.size() >= 1 && payload.title.size() <= 80
+          && payload.author is string && payload.author.size() >= 1 && payload.author.size() <= 80
+          && payload.review is string && payload.review.size() >= 1 && payload.review.size() <= 280
+          && (!('prompt' in payload) || isValidPrompt(payload.prompt))
+      ) || (
+        type == 'currently_reading'
+          && payload is map
+          && payload.keys().hasAll(['title', 'thoughts'])
+          && payload.keys().hasOnly(['title', 'thoughts', 'prompt'])
+          && payload.title is string && payload.title.size() >= 1 && payload.title.size() <= 80
+          && payload.thoughts is string && payload.thoughts.size() >= 1 && payload.thoughts.size() <= 280
+          && (!('prompt' in payload) || isValidPrompt(payload.prompt))
+      ) || (
+        type == 'rooftop_prompt'
+          && payload is map
+          && payload.keys().hasAll(['text'])
+          && payload.keys().hasOnly(['text', 'prompt'])
+          && payload.text is string && payload.text.size() >= 1 && payload.text.size() <= 280
+          && (!('prompt' in payload) || isValidPrompt(payload.prompt))
+      ) || (
+        type == 'reflection'
+          && payload is map
+          && payload.keys().hasAll(['text', 'anonymous'])
+          && payload.keys().hasOnly(['text', 'anonymous', 'prompt'])
+          && payload.text is string && payload.text.size() >= 1 && payload.text.size() <= 280
+          && payload.anonymous is bool
+          && (!('prompt' in payload) || isValidPrompt(payload.prompt))
+      ) || (
+        type == 'album_recommendation'
+          && payload is map
+          && payload.keys().hasAll(['album', 'artist', 'thoughts'])
+          && payload.keys().hasOnly(['album', 'artist', 'thoughts', 'prompt'])
+          && payload.album is string && payload.album.size() >= 1 && payload.album.size() <= 80
+          && payload.artist is string && payload.artist.size() >= 1 && payload.artist.size() <= 80
+          && payload.thoughts is string && payload.thoughts.size() >= 1 && payload.thoughts.size() <= 280
+          && (!('prompt' in payload) || isValidPrompt(payload.prompt))
+      ) || (
+        type == 'listening_memory'
+          && payload is map
+          && payload.keys().hasAll(['songOrAlbum', 'memory'])
+          && payload.keys().hasOnly(['songOrAlbum', 'memory', 'prompt'])
+          && payload.songOrAlbum is string && payload.songOrAlbum.size() >= 1 && payload.songOrAlbum.size() <= 80
+          && payload.memory is string && payload.memory.size() >= 1 && payload.memory.size() <= 280
+          && (!('prompt' in payload) || isValidPrompt(payload.prompt))
+      );
+    }
+
+    // Helper: Validates the full memory document schema on create.
+    // - createdAt must be a positive integer (Date.now() in milliseconds).
+    // - payload field must be present and pass isValidPayload for the given type.
+    function isValidMemory() {
+      let d = request.resource.data;
+      let allowedTypes = [
+        'note', 'object', 'tape', 'moment', 'whisper',
+        'quote', 'book_recommendation', 'currently_reading',
+        'rooftop_prompt', 'reflection', 'album_recommendation', 'listening_memory'
+      ];
+      return d.type in allowedTypes
+        && d.creatorUid == request.auth.uid
+        && d.createdBy is string && d.createdBy.size() >= 1 && d.createdBy.size() <= 80
+        && d.createdAt is int && d.createdAt > 0
+        && d.title is string && d.title.size() >= 1 && d.title.size() <= 80
+        && (!('description' in d) || (d.description is string && d.description.size() <= 280))
+        && ('payload' in d)
+        && isValidPayload(d.type, d.payload);
+    }
+
+    // Helper: Root room document keys that public spaces are permitted to update.
+    // Excludes all media/host/queue/photo fields that are private-gathering-only.
+    // Each key is justified by a specific write path in Presence.ts:
+    //   presence       — updatePresence() L518 (legacy bridge field, written for all rooms)
+    //   activeCount    — presence snapshot listener L732-735 (lobby occupancy display)
+    //   lastActiveAt   — presence snapshot listener L734 (room sorting in lobby)
+    //   visitCount     — join transaction L446 (visit stats)
+    //   visitorCount   — join transaction L449-455 (unique visitor stats)
+    //   memoryCount    — saveMemory L1193 / removeMemory L1223 (activity counter in lobby)
+    //   updatedAt      — saveMemory L1194 / removeMemory L1224 (last content change)
+    //   latestAction   — broadcastActivity L348 (ambient activity in lobby feed)
+    //   notes          — debouncedSyncNotes L63 (legacy bridge, written for ALL rooms)
+    //   roomCode       — join transaction L457 (schema backfill for older docs)
+    //   displayName    — join transaction L458-462 (schema backfill)
+    //   isPrivate      — join transaction L463 (schema backfill)
+    function allowedPublicKeys() {
+      return [
+        'presence', 'activeCount', 'lastActiveAt',
+        'visitCount', 'visitorCount',
+        'memoryCount', 'updatedAt',
+        'latestAction',
+        'notes',
+        'roomCode', 'displayName', 'isPrivate'
+      ];
+    }
+
     // 1. User Profiles
     match /artifacts/{appId}/users/{userId}/userData/profile {
       allow read: if true;
@@ -52,18 +212,20 @@ service cloud.firestore {
     match /artifacts/{appId}/public/data/rooms/{roomCode} {
       allow read: if true; // Publicly readable so anyone can join
       allow create: if isAuthenticated(); // Only authenticated users can initialize rooms
-      
-      // Enforce that updates only touch allowed fields (no arbitrary root document modifications)
-      allow update: if isAuthenticated() 
+
+      // Enforce that updates only touch allowed fields (no arbitrary root document modifications).
+      // For public spaces, additionally restrict to only safe metadata keys — blocking
+      // media sync, host control, queue management, and photo counter writes.
+      allow update: if isAuthenticated()
         && request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly([
-            'theme', 
-            'state', 
-            'video', 
-            'latestAction', 
-            'notes',    // TEMPORARY BRIDGE FIELD: Deprecate after legacy note clients migrate
-            'objects',  // TEMPORARY BRIDGE FIELD: Deprecate after legacy object clients migrate
-            'presence', // TEMPORARY BRIDGE FIELD: Deprecate after legacy presence clients migrate
+            'theme',
+            'state',
+            'video',
+            'latestAction',
+            'notes',           // TEMPORARY BRIDGE FIELD: Deprecate after legacy note clients migrate
+            'objects',         // TEMPORARY BRIDGE FIELD: Deprecate after legacy object clients migrate
+            'presence',        // TEMPORARY BRIDGE FIELD: Deprecate after legacy presence clients migrate
             'roomCode',
             'displayName',
             'createdAt',
@@ -78,8 +240,11 @@ service cloud.firestore {
             'isPrivate',
             'visitorCount',
             'visitCount'
-          ]);
-          
+          ])
+        && (!isPublicSpace(roomCode)
+            || request.resource.data.diff(resource.data).affectedKeys()
+                  .hasOnly(allowedPublicKeys()));
+
       allow delete: if false; // Room deletion is prohibited
     }
 
@@ -104,16 +269,18 @@ service cloud.firestore {
     }
 
     // 6. Room Queue Subcollection
+    // Public spaces are blocked from all queue operations (client-side + rules).
     match /artifacts/{appId}/public/data/rooms/{roomCode}/queue/{itemId} {
       allow read: if true;
-      allow create: if isAuthenticated();
+      allow create: if isAuthenticated() && !isPublicSpace(roomCode);
       allow update: if isAuthenticated()
+        && !isPublicSpace(roomCode)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
         && request.resource.data.url == resource.data.url
         && request.resource.data.title == resource.data.title
         && request.resource.data.addedBy == resource.data.addedBy
         && request.resource.data.addedAt == resource.data.addedAt;
-      allow delete: if isAuthenticated();
+      allow delete: if isAuthenticated() && !isPublicSpace(roomCode);
     }
 
     // 7. Room History Subcollection
@@ -124,9 +291,14 @@ service cloud.firestore {
     }
 
     // 8. Room Memories Subcollection
+    // CREATE enforces full schema validation via isValidMemory() + isValidPayload().
+    // Public activity types require non-null payloads with exact key shapes.
+    // UPDATE allows only title/description changes; all other fields are immutable.
+    // DELETE is creator-only. Northern Lights anonymous posts store the real creatorUid
+    // even when createdBy is set to 'Someone', so creator-only delete works correctly.
     match /artifacts/{appId}/public/data/rooms/{roomCode}/memories/{memoryId} {
       allow read: if true;
-      allow create: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidMemory();
       allow update: if isAuthenticated()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'description'])
         && request.resource.data.creatorUid == resource.data.creatorUid
@@ -138,9 +310,12 @@ service cloud.firestore {
     }
 
     // 9. Room Photos Subcollection
+    // CREATE is blocked for public spaces — photos are a private gathering feature.
+    // DELETE is creator-only at Firestore level. Storage file deletion is a separate
+    // open risk documented in storage.rules (no custom metadata on upload).
     match /artifacts/{appId}/public/data/rooms/{roomCode}/photos/{photoId} {
       allow read: if true;
-      allow create: if isAuthenticated();
+      allow create: if isAuthenticated() && !isPublicSpace(roomCode);
       allow update: if false;
       allow delete: if isAuthenticated() && resource.data.creatorUid == request.auth.uid;
     }
@@ -148,8 +323,8 @@ service cloud.firestore {
     // 10. Room Visitors Subcollection
     match /artifacts/{appId}/public/data/rooms/{roomCode}/visitors/{userId} {
       allow read: if true;
-      allow create: if isAuthenticated() && userId == request.auth.uid;
-      allow update, delete: if false;
+      allow create, update: if isAuthenticated() && userId == request.auth.uid;
+      allow delete: if false;
     }
   }
 }
