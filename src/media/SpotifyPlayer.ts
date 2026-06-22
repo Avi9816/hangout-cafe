@@ -1,6 +1,7 @@
 import { EventBus } from '../core/EventBus';
 import { APP_EVENTS } from '../core/events';
 import { $ } from '../utils/dom';
+import { isPublicSpace } from '../config/spaceCapabilities';
 
 export class SpotifyPlayer {
   private bus: EventBus;
@@ -14,16 +15,41 @@ export class SpotifyPlayer {
 
   private setupBusListeners() {
     this.bus.on(APP_EVENTS.REMOTE_MEDIA_UPDATED, (data: any) => {
+        const presence = (window as any).presence;
+        if (presence && presence.roomCode && isPublicSpace(presence.roomCode)) {
+            return;
+        }
         if (data.type === 'spotify') {
             this.loadSpotify(data.url, data.host);
         }
     });
 
     this.bus.on(APP_EVENTS.MEDIA_PLAY_REQUEST, (data: any) => {
+        const presence = (window as any).presence;
+        if (presence && presence.roomCode && isPublicSpace(presence.roomCode)) {
+            return;
+        }
         if (data.type === 'spotify') {
             this.loadSpotify(data.url);
         }
     });
+
+    this.bus.on(APP_EVENTS.ROOM_CHANGED, (data: any) => {
+        if (!data.room || isPublicSpace(data.room)) {
+            this.clearPlayer();
+        }
+    });
+  }
+
+  private clearPlayer() {
+    if (this.container) {
+        this.container.innerHTML = '';
+        this.container.classList.remove('active');
+    }
+    if (this.hostEl) {
+        this.hostEl.textContent = '';
+        this.hostEl.classList.remove('visible');
+    }
   }
 
   private loadSpotify(url: string, hostName: string | null = null) {

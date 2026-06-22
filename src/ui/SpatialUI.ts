@@ -10,7 +10,7 @@ import { ROOM_CONFIG } from '../constants/app';
 import { getIcon } from './icons';
 import { getRoomSoul } from '../utils/roomSoul';
 import { getRoomEchoes } from '../utils/roomEchoes';
-import { getSpaceCapabilities, getPublicSpaceActivityConfig } from '../config/spaceCapabilities';
+import { getSpaceCapabilities, getPublicSpaceActivityConfig, isPublicSpace } from '../config/spaceCapabilities';
 import { isValidString } from '../utils/validation';
 
 function formatTimeAgo(timestamp: number): string {
@@ -36,6 +36,26 @@ export class SpatialUI {
   photos: RoomPhoto[] = [];
   currentMetadata: any = null;
   
+  private lastNotesSig = '';
+  private lastObjectsSig = '';
+  private lastQueueSig = '';
+  private lastHistorySig = '';
+  private lastMemoriesSig = '';
+  private lastPhotosSig = '';
+  private lastEchoesSig = '';
+  private lastFavoritesSig = '';
+
+  resetRenderStates() {
+    this.lastNotesSig = '';
+    this.lastObjectsSig = '';
+    this.lastQueueSig = '';
+    this.lastHistorySig = '';
+    this.lastMemoriesSig = '';
+    this.lastPhotosSig = '';
+    this.lastEchoesSig = '';
+    this.lastFavoritesSig = '';
+  }
+
   elements: Record<string, HTMLElement | HTMLInputElement | null>;
 
   constructor(bus: EventBus) {
@@ -106,6 +126,7 @@ export class SpatialUI {
           if (data.room === null) {
               this.clearTransientRoomUI();
           } else {
+              this.resetRenderStates();
               window.scrollTo({ top: 0, behavior: 'smooth' });
               if (!data.isPrivate) {
                   const activeTabBtn = $('.explore-tab.active');
@@ -553,6 +574,13 @@ export class SpatialUI {
 
   renderWall() {
     devLog('[DEBUG_SPATIAL_UI] renderWall called, notes count =', this.notes.length);
+    const sig = this.notes.length + '_' + this.notes.map(n => `${n.id}_${n.text.length}_${n.author}`).join(',');
+    if (sig === this.lastNotesSig) {
+        devLog('[DEBUG_SPATIAL_UI] renderWall skipped (cached)');
+        return;
+    }
+    this.lastNotesSig = sig;
+
     const wall = this.elements.wall;
     if(!wall) {
         devLog('[DEBUG_SPATIAL_UI] renderWall complete (no wall element)');
@@ -603,6 +631,13 @@ export class SpatialUI {
 
   renderObjects() {
     devLog('[DEBUG_SPATIAL_UI] renderObjects called, objects count =', this.objects.length);
+    const sig = this.objects.length + '_' + this.objects.map(o => `${o.id}_${o.emoji}_${o.label.length}_${o.author}`).join(',');
+    if (sig === this.lastObjectsSig) {
+        devLog('[DEBUG_SPATIAL_UI] renderObjects skipped (cached)');
+        return;
+    }
+    this.lastObjectsSig = sig;
+
     const table = this.elements.table;
     if(!table) {
         devLog('[DEBUG_SPATIAL_UI] renderObjects complete (no table element)');
@@ -666,15 +701,22 @@ export class SpatialUI {
   }
 
   renderQueue() {
+    const presence = (window as any).presence;
+    const isHost = presence?.currentVideoState && presence.currentVideoState.hostId === presence.userId;
+    const sig = this.queue.length + '_' + this.queue.map(q => `${q.id}_${q.status}`).join(',') + `_host_${isHost}`;
+    if (sig === this.lastQueueSig) {
+        devLog('[DEBUG_SPATIAL_UI] renderQueue skipped (cached)');
+        return;
+    }
+    this.lastQueueSig = sig;
+
     const listEl = $('vhs-queue-list');
     const skipBtn = $('btn-skip-tape');
     if (!listEl) return;
     listEl.innerHTML = '';
 
-    const presence = (window as any).presence;
     if (!presence) return;
 
-    const isHost = presence.currentVideoState && presence.currentVideoState.hostId === presence.userId;
     
     // Toggle skip button visibility for host
     if (skipBtn) {
@@ -859,6 +901,13 @@ export class SpatialUI {
   }
 
   renderHistory() {
+    const sig = this.history.length + '_' + this.history.map(h => `${h.id}_${h.type}`).join(',');
+    if (sig === this.lastHistorySig) {
+        devLog('[DEBUG_SPATIAL_UI] renderHistory skipped (cached)');
+        return;
+    }
+    this.lastHistorySig = sig;
+
     const listEl = $('room-history-list');
     if (!listEl) return;
     listEl.innerHTML = '';
@@ -944,13 +993,21 @@ export class SpatialUI {
   renderEchoes() {
     const listEl = $('room-echoes-list');
     if (!listEl) return;
-    listEl.innerHTML = '';
 
     const echoes = getRoomEchoes({
       history: this.history,
       metadata: this.currentMetadata || undefined,
       max: 3
     });
+
+    const sig = echoes.length + '_' + echoes.map(e => `${e.id}_${e.text.length}_${e.tone}`).join(',');
+    if (sig === this.lastEchoesSig) {
+        devLog('[DEBUG_SPATIAL_UI] renderEchoes skipped (cached)');
+        return;
+    }
+    this.lastEchoesSig = sig;
+
+    listEl.innerHTML = '';
 
     if (echoes.length === 0) {
       const emptyDiv = createSafeElement('div', 'echo-empty-state', 'No echoes yet. Leave something behind.');
@@ -985,7 +1042,6 @@ export class SpatialUI {
   renderMemories() {
     const listEl = $('room-memories-list');
     if (!listEl) return;
-    listEl.innerHTML = '';
 
     const presence = (window as any).presence;
     if (!presence) return;
@@ -1011,8 +1067,19 @@ export class SpatialUI {
 
     combined.sort((a, b) => b.createdAt - a.createdAt);
 
-    if (combined.length === 0) {
-        listEl.innerHTML = '';
+    const isPublic = isPublicSpace(presence.roomCode || '');
+    const displayList = isPublic ? combined.slice(0, 20) : combined;
+
+    const sig = displayList.length + '_' + displayList.map(item => `${item.id}_${item.type}_${item.createdAt}`).join(',');
+    if (sig === this.lastMemoriesSig) {
+        devLog('[DEBUG_SPATIAL_UI] renderMemories skipped (cached)');
+        return;
+    }
+    this.lastMemoriesSig = sig;
+
+    listEl.innerHTML = '';
+
+    if (displayList.length === 0) {
         const emptyDiv = createSafeElement('div');
         emptyDiv.style.display = 'flex';
         emptyDiv.style.flexDirection = 'column';
@@ -1033,7 +1100,7 @@ export class SpatialUI {
     }
 
     const frag = document.createDocumentFragment();
-    combined.forEach(item => {
+    displayList.forEach(item => {
         const itemDiv = createSafeElement('div', 'room-memory-card');
 
         let iconName = 'room';
@@ -1308,6 +1375,13 @@ export class SpatialUI {
   }
 
   renderPhotos() {
+    const sig = this.photos.length + '_' + this.photos.map(p => `${p.id}_${p.createdAt}`).join(',');
+    if (sig === this.lastPhotosSig) {
+        devLog('[DEBUG_SPATIAL_UI] renderPhotos skipped (cached)');
+        return;
+    }
+    this.lastPhotosSig = sig;
+
     const gridEl = $('photo-grid');
     if (!gridEl) return;
     gridEl.innerHTML = '';
@@ -1655,6 +1729,13 @@ export class SpatialUI {
   }
 
   renderFavorites(favorites: any[]) {
+    const sig = favorites.length + '_' + favorites.map((f: any) => `${f.roomCode}_${f.activeCount || 0}_${f.memoryCount || 0}`).join(',');
+    if (sig === this.lastFavoritesSig) {
+        devLog('[DEBUG_SPATIAL_UI] renderFavorites skipped (cached)');
+        return;
+    }
+    this.lastFavoritesSig = sig;
+
     const gridEl = $('favorites-grid');
     if (!gridEl) return;
 
@@ -1908,6 +1989,7 @@ export class SpatialUI {
   }
 
   clearTransientRoomUI() {
+    this.resetRenderStates();
     this.notes = [];
     this.renderWall();
     

@@ -350,8 +350,6 @@ export class SharedPresence {
   }
 
   leaveRoom() {
-    if(!this.userId || !db || !this.roomCode) return;
-    
     if (this.unsub) { this.unsub(); this.unsub = null; }
     if (this.unsubNotes) { this.unsubNotes(); this.unsubNotes = null; }
     if (this.unsubPresence) { this.unsubPresence(); this.unsubPresence = null; }
@@ -364,19 +362,28 @@ export class SharedPresence {
     this.memories = [];
     this.photos = [];
 
-    const ref = doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode);
+    const oldRoomCode = this.roomCode;
+    this.roomCode = null;
+    this.currentVideoState = null;
+    this.bus.emit(APP_EVENTS.ROOM_CHANGED, { room: null, isPrivate: false, theme: null });
+
+    if(!this.userId || !db || !oldRoomCode) return;
+
+    const ref = doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', oldRoomCode);
     updateDoc(ref, {
         [`presence.${this.userId}`]: deleteField(),
         activeCount: increment(-1),
         lastActiveAt: Date.now()
     }).catch(err => console.warn("Failed to clean up presence on leaveRoom:", err));
 
-    const presDocRef = doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'presence', this.userId);
+    const presDocRef = doc(db, 'artifacts', this.appId, 'public', 'data', 'rooms', oldRoomCode, 'presence', this.userId);
     deleteDoc(presDocRef).catch(err => console.warn("Failed to delete presence doc on leaveRoom:", err));
-    this.queue = [];
-    this.roomCode = null;
-    this.currentVideoState = null;
-    this.bus.emit(APP_EVENTS.ROOM_CHANGED, { room: null, isPrivate: false, theme: null });
+  }
+
+  destroy() {
+    this.leaveRoom();
+    this.cleanupFavorites();
+    this.lifecycle.clearAll();
   }
 
   joinRoom(roomKey: string, theme: string | null = null) {
@@ -397,7 +404,7 @@ export class SharedPresence {
     this.joinedAt = Date.now();
 
     this.roomCode = roomKey; this.ghostUsers = {}; this.activeUsers = {}; this.lastActionTimestamp = 0;
-    const isPublic = ['last-train', 'window-seat', 'between-pages', 'northern-lights'].includes(roomKey);
+    const isPublic = isPublicSpace(roomKey);
     devLog('[ROOM_CHANGED_EMIT] joinRoom: isPrivate = ' + !isPublic + ', theme = ' + theme);
     this.bus.emit(APP_EVENTS.ROOM_CHANGED, { room: roomKey, isPrivate: !isPublic, theme: theme });
 
@@ -544,6 +551,9 @@ export class SharedPresence {
     if(this.unsubNotes) { this.unsubNotes(); this.unsubNotes = null; }
     if(this.unsubPresence) { this.unsubPresence(); this.unsubPresence = null; }
     if(this.unsubPhotos) { this.unsubPhotos(); this.unsubPhotos = null; }
+    if(this.unsubQueue) { this.unsubQueue(); this.unsubQueue = null; }
+    if(this.unsubHistory) { this.unsubHistory(); this.unsubHistory = null; }
+    if(this.unsubMemories) { this.unsubMemories(); this.unsubMemories = null; }
     this.useSubcollectionNotes = false;
     this.useSubcollectionPresence = false;
 
@@ -755,25 +765,31 @@ export class SharedPresence {
       console.error('[DEBUG_LISTEN_ROOM] Subcollection presence snapshot error:', err);
     });
 
-    const queueCol = collection(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'queue');
-    const queueQuery = query(queueCol, orderBy('addedAt', 'asc'));
-    this.unsubQueue = onSnapshot(queueQuery, (snap) => {
-      this.queue = snap.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          url: data.url || '',
-          title: data.title || '',
-          addedBy: data.addedBy || '',
-          addedAt: data.addedAt || 0,
-          status: data.status || 'pending'
-        } as QueueItem;
-      });
-      devLog('[QUEUE_SYNC] Realtime queue update received. Count:', this.queue.length);
-      this.bus.emit(APP_EVENTS.SYNC_QUEUE, this.queue);
-    }, (err) => {
-      console.error('[DEBUG_LISTEN_ROOM] Queue snapshot error:', err);
-    });
+    const isPublic = isPublicSpace(this.roomCode);
+    if (!isPublic) {
+        const queueCol = collection(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'queue');
+        const queueQuery = query(queueCol, orderBy('addedAt', 'asc'));
+        this.unsubQueue = onSnapshot(queueQuery, (snap) => {
+          this.queue = snap.docs.map(doc => {
+            const data = doc.data();
+            return {
+              id: doc.id,
+              url: data.url || '',
+              title: data.title || '',
+              addedBy: data.addedBy || '',
+              addedAt: data.addedAt || 0,
+              status: data.status || 'pending'
+            } as QueueItem;
+          });
+          devLog('[QUEUE_SYNC] Realtime queue update received. Count:', this.queue.length);
+          this.bus.emit(APP_EVENTS.SYNC_QUEUE, this.queue);
+        }, (err) => {
+          console.error('[DEBUG_LISTEN_ROOM] Queue snapshot error:', err);
+        });
+    } else {
+        this.queue = [];
+        this.bus.emit(APP_EVENTS.SYNC_QUEUE, []);
+    }
 
     const historyCol = collection(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'history');
     const historyQuery = query(historyCol, orderBy('createdAt', 'desc'), limit(50));
@@ -817,25 +833,30 @@ export class SharedPresence {
       console.error('[DEBUG_LISTEN_ROOM] Memories snapshot error:', err);
     });
 
-    const photosCol = collection(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'photos');
-    const photosQuery = query(photosCol, orderBy('createdAt', 'desc'), limit(100));
-    this.unsubPhotos = onSnapshot(photosQuery, (snap) => {
-      this.photos = snap.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          url: data.url || '',
-          caption: data.caption || '',
-          uploadedBy: data.uploadedBy || 'wanderer',
-          creatorUid: data.creatorUid || '',
-          createdAt: data.createdAt || 0
-        } as RoomPhoto;
-      });
-      devLog('[PHOTOS_SYNC] Realtime photos update received. Count:', this.photos.length);
-      this.bus.emit(APP_EVENTS.SYNC_PHOTOS, this.photos);
-    }, (err) => {
-      console.error('[DEBUG_LISTEN_ROOM] Photos snapshot error:', err);
-    });
+    if (!isPublic) {
+        const photosCol = collection(db, 'artifacts', this.appId, 'public', 'data', 'rooms', this.roomCode, 'photos');
+        const photosQuery = query(photosCol, orderBy('createdAt', 'desc'), limit(100));
+        this.unsubPhotos = onSnapshot(photosQuery, (snap) => {
+          this.photos = snap.docs.map(doc => {
+            const data = doc.data();
+            return {
+              id: doc.id,
+              url: data.url || '',
+              caption: data.caption || '',
+              uploadedBy: data.uploadedBy || 'wanderer',
+              creatorUid: data.creatorUid || '',
+              createdAt: data.createdAt || 0
+            } as RoomPhoto;
+          });
+          devLog('[PHOTOS_SYNC] Realtime photos update received. Count:', this.photos.length);
+          this.bus.emit(APP_EVENTS.SYNC_PHOTOS, this.photos);
+        }, (err) => {
+          console.error('[DEBUG_LISTEN_ROOM] Photos snapshot error:', err);
+        });
+    } else {
+        this.photos = [];
+        this.bus.emit(APP_EVENTS.SYNC_PHOTOS, []);
+    }
   }
 
   renderPresenceUI() {

@@ -1,6 +1,7 @@
 import { EventBus } from '../core/EventBus';
 import { APP_EVENTS } from '../core/events';
 import { $, createSafeElement } from '../utils/dom';
+import { isPublicSpace } from '../config/spaceCapabilities';
 
 export class YouTubeSync {
   private bus: EventBus;
@@ -17,6 +18,10 @@ export class YouTubeSync {
 
   private setupBusListeners() {
     this.bus.on(APP_EVENTS.REMOTE_MEDIA_UPDATED, (data: any) => {
+        const presence = (window as any).presence;
+        if (presence && presence.roomCode && isPublicSpace(presence.roomCode)) {
+            return;
+        }
         if (data.type === 'youtube') {
             this.isRemoteUpdate = true;
             this.loadYouTube(data.url, data, data.host);
@@ -25,10 +30,40 @@ export class YouTubeSync {
     });
 
     this.bus.on(APP_EVENTS.MEDIA_PLAY_REQUEST, (data: any) => {
+        const presence = (window as any).presence;
+        if (presence && presence.roomCode && isPublicSpace(presence.roomCode)) {
+            return;
+        }
         if (data.type === 'youtube') {
             this.loadYouTube(data.url);
         }
     });
+
+    this.bus.on(APP_EVENTS.ROOM_CHANGED, (data: any) => {
+        if (!data.room || isPublicSpace(data.room)) {
+            this.destroyPlayer();
+        }
+    });
+  }
+
+  private destroyPlayer() {
+    this.currentYtId = null;
+    if (this.ytPlayer && typeof this.ytPlayer.destroy === 'function') {
+        try {
+            this.ytPlayer.destroy();
+        } catch (err) {
+            console.warn('Error destroying YouTube player:', err);
+        }
+    }
+    this.ytPlayer = null;
+    if (this.container) {
+        this.container.classList.remove('active');
+        this.container.innerHTML = '';
+    }
+    if (this.hostEl) {
+        this.hostEl.classList.remove('visible');
+        this.hostEl.textContent = '';
+    }
   }
 
   private loadYouTube(url: string, state: any = null, hostName: string | null = null) {
@@ -58,7 +93,12 @@ export class YouTubeSync {
     }
 
     this.currentYtId = videoId;
-    if(this.ytPlayer && typeof this.ytPlayer.destroy === 'function') this.ytPlayer.destroy();
+    if(this.ytPlayer && typeof this.ytPlayer.destroy === 'function') {
+        try {
+            this.ytPlayer.destroy();
+        } catch (e) {}
+    }
+    this.ytPlayer = null;
     
     if(this.container) {
         this.container.innerHTML = '';

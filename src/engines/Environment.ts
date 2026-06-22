@@ -13,6 +13,7 @@ export class Environment {
   private bus: EventBus;
   private currentRoom: string | null = null;
   private isPrivate = false;
+  private isLooping = false;
   
   private canvas: HTMLCanvasElement | null;
   private ctx: CanvasRenderingContext2D | null;
@@ -71,6 +72,7 @@ export class Environment {
               } else {
                   this.changePublicRoom(data.room);
               }
+              this.startCanvasLoop();
           }
       });
 
@@ -103,6 +105,12 @@ export class Environment {
       }
   }
 
+  startCanvasLoop() {
+      if (this.isLooping) return;
+      this.isLooping = true;
+      this.canvasLoop();
+  }
+
   initCanvas() {
     if (!this.canvas) return;
     const resize = () => {
@@ -113,11 +121,19 @@ export class Environment {
     };
     window.addEventListener('resize', debounce(resize, 200));
     resize();
-    this.canvasLoop();
+    this.startCanvasLoop();
   }
 
   canvasLoop() {
-    if (!this.ctx || !this.canvas) return;
+    if (!this.isLooping || !this.ctx || !this.canvas) {
+        this.isLooping = false;
+        return;
+    }
+    if (!this.currentRoom) {
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        this.isLooping = false;
+        return;
+    }
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     
     const now = Date.now();
@@ -368,6 +384,7 @@ export class Environment {
     applyAtmosphere('default');
     this.renderWeather();
     this.stationLoop(false);
+    this.lightningLoop(false);
 
     this.transitionToLobbyView();
   }

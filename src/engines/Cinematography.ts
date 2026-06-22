@@ -49,22 +49,30 @@ export class Cinematography {
     const s = this.state;
     const lerpFactor = this.isMobile ? 0.05 : 0.015; 
     
-    s.currentX += (s.targetX - s.currentX) * lerpFactor;
-    s.currentY += (s.targetY - s.currentY) * lerpFactor;
-    s.currentScroll += (s.targetScroll - s.currentScroll) * 0.05;
+    const dx = s.targetX - s.currentX;
+    const dy = s.targetY - s.currentY;
+    const ds = s.targetScroll - s.currentScroll;
 
-    const docStyle = document.documentElement.style;
-    const panMod = this.isMobile ? 5 : 25; 
-    
-    docStyle.setProperty('--cam-x', `${s.currentX * panMod}px`);
-    docStyle.setProperty('--cam-y', `${s.currentY * panMod}px`);
-    docStyle.setProperty('--scroll-y', `${s.currentScroll * 80}px`);
+    const needsUpdate = Math.abs(dx) > 0.001 || Math.abs(dy) > 0.001 || Math.abs(ds) > 0.001;
 
-    const bgBlur = Math.max(0, s.currentScroll * 20);
-    const fgBlur = Math.max(0, (1 - s.currentScroll) * 15);
-    
-    docStyle.setProperty('--focus-bg', `${bgBlur}px`);
-    docStyle.setProperty('--focus-fg', `${fgBlur}px`);
+    if (needsUpdate) {
+        s.currentX += dx * lerpFactor;
+        s.currentY += dy * lerpFactor;
+        s.currentScroll += ds * 0.05;
+
+        const docStyle = document.documentElement.style;
+        const panMod = this.isMobile ? 5 : 25; 
+        
+        docStyle.setProperty('--cam-x', `${s.currentX * panMod}px`);
+        docStyle.setProperty('--cam-y', `${s.currentY * panMod}px`);
+        docStyle.setProperty('--scroll-y', `${s.currentScroll * 80}px`);
+
+        const bgBlur = Math.max(0, s.currentScroll * 20);
+        const fgBlur = Math.max(0, (1 - s.currentScroll) * 15);
+        
+        docStyle.setProperty('--focus-bg', `${bgBlur}px`);
+        docStyle.setProperty('--focus-fg', `${fgBlur}px`);
+    }
 
     requestAnimationFrame(() => this.renderLoop());
   }

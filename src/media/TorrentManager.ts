@@ -4,9 +4,11 @@ import { VideoState } from '../types';
 import { $ } from '../utils/dom';
 import { devLog } from '../utils/logger';
 
+import { isPublicSpace } from '../config/spaceCapabilities';
+
 export class TorrentManager {
   private bus: EventBus;
-  private wtClient: any = (window as any).WebTorrent ? new (window as any).WebTorrent() : null;
+  private wtClient: any = null;
   private currentMagnet: string | null = null;
   private localVideoObj: HTMLVideoElement | null = null;
   private container = $('local-video-container');
@@ -21,20 +23,38 @@ export class TorrentManager {
 
   private setupBusListeners() {
     this.bus.on(APP_EVENTS.REMOTE_MEDIA_UPDATED, (data: any) => {
+        const presence = (window as any).presence;
+        if (presence && presence.roomCode && isPublicSpace(presence.roomCode)) {
+            return;
+        }
         if (data.type === 'magnet') {
             this.loadMagnet(data);
         }
     });
 
     this.bus.on(APP_EVENTS.MEDIA_PLAY_REQUEST, (data: any) => {
+        const presence = (window as any).presence;
+        if (presence && presence.roomCode && isPublicSpace(presence.roomCode)) {
+            return;
+        }
         if (data.type === 'vhs_seed') {
             this.seedFile(data.file);
+        }
+    });
+
+    this.bus.on(APP_EVENTS.ROOM_CHANGED, (data: any) => {
+        if (!data.room || isPublicSpace(data.room)) {
+            this.cleanupTorrent();
         }
     });
   }
 
   private seedFile(file: File) {
-      if(!this.wtClient) this.wtClient = new (window as any).WebTorrent();
+      if(!this.wtClient && (window as any).WebTorrent) this.wtClient = new (window as any).WebTorrent();
+      if(!this.wtClient) {
+          if(this.statusEl) this.statusEl.textContent = 'WebTorrent client unavailable.';
+          return;
+      }
       if(this.statusEl) this.statusEl.textContent = 'Seeding tape to the room...';
       
       this.wtClient.seed(file, (torrent: any) => {
@@ -54,14 +74,14 @@ export class TorrentManager {
   }
 
   private loadMagnet(videoData: VideoState) {
-      if (!this.wtClient) this.wtClient = new (window as any).WebTorrent();
+      if (!this.wtClient && (window as any).WebTorrent) this.wtClient = new (window as any).WebTorrent();
       
       if(this.currentMagnet !== videoData.url) {
           this.isRemoteUpdate = true;
           devLog('[VHS_REMOTE_UPDATE] Loading new magnet:', videoData.url);
           
           // Cleanup old torrent/video
-          if (this.currentMagnet) {
+          if (this.currentMagnet && this.wtClient) {
               try {
                   this.wtClient.remove(this.currentMagnet);
               } catch (e) {
@@ -85,10 +105,12 @@ export class TorrentManager {
               this.hostEl.classList.add('visible'); 
           }
           
-          this.wtClient.add(videoData.url, (torrent: any) => {
-              if(this.statusEl) this.statusEl.textContent = `playing shared tape...`;
-              this.renderTorrent(torrent, videoData);
-          });
+          if (this.wtClient) {
+              this.wtClient.add(videoData.url, (torrent: any) => {
+                  if(this.statusEl) this.statusEl.textContent = `playing shared tape...`;
+                  this.renderTorrent(torrent, videoData);
+              });
+          }
       } else if (this.localVideoObj) {
           this.isRemoteUpdate = true;
           devLog('[VHS_REMOTE_UPDATE] Applying seek/playback update:', videoData.action, videoData.time);
@@ -197,6 +219,48 @@ export class TorrentManager {
           });
       } else {
           this.isRemoteUpdate = false;
+      }
+  }
+
+  private cleanupTorrent() {
+      if (this.currentMagnet && this.wtClient) {
+          try {
+              this.wtClient.remove(this.currentMagnet);
+          } catch (e) {
+              console.warn("Error removing old torrent on room change:", e);
+          }
+      }
+      this.currentMagnet = null;
+      if (this.localVideoObj) {
+          try {
+              this.localVideoObj.pause();
+              this.localVideoObj.src = "";
+              this.localVideoObj.load();
+          } catch (e) {}
+          this.localVideoObj = null;
+      }
+      if (this.container) {
+          this.container.innerHTML = '';
+          this.container.classList.remove('active');
+      }
+      if (this.statusEl) {
+          this.statusEl.textContent = '';
+      }
+      if (this.hostEl) {
+          this.hostEl.classList.remove('visible');
+          this.hostEl.textContent = '';
+      }
+  }
+
+  destroy() {
+      this.cleanupTorrent();
+      if (this.wtClient) {
+          try {
+              this.wtClient.destroy();
+          } catch (e) {
+              console.warn("Error destroying WebTorrent client:", e);
+          }
+          this.wtClient = null;
       }
   }
 }
