@@ -287,13 +287,15 @@ async function main() {
         await sleep(2000);
         
         // Now click dedicated "Enter room" button in the favorite card
-        await page2.evaluate((room) => {
+        const clickResult = await page2.evaluate((room) => {
             const card = document.querySelector(`.favorite-card[data-room-code="${room}"]`);
-            if (card) {
-                const btn = card.querySelector('.favorite-card-action');
-                if (btn) btn.click();
-            }
+            if (!card) return 'card_not_found';
+            const btn = card.querySelector('.favorite-card-action');
+            if (!btn) return 'btn_not_found';
+            btn.click();
+            return 'clicked';
         }, testRoomName);
+        console.log('Check 7 click result:', clickResult);
         await sleep(3000);
 
         const tab2CurrentRoomCode = await page2.evaluate(() => window.presence.roomCode);

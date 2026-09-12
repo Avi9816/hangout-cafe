@@ -311,6 +311,8 @@ async function main() {
             });
             const nameEl = document.getElementById('selected-photo-name');
             if (nameEl) nameEl.textContent = 'test-image.png';
+            const capInput = document.getElementById('photo-caption-input');
+            if (capInput) capInput.value = '';
         });
         await page1.type('#photo-caption-input', 'Restored Polaroid');
         await page1.click('#btn-upload-photo');

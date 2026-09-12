@@ -368,6 +368,9 @@ export class Environment {
   }
 
   private handleLeaveRoom() {
+    this.lifecycle.clearAll();
+    this.lightningTimeout = undefined;
+    this.stationTimeout = undefined;
     this.currentRoom = null;
     this.isPrivate = false;
     document.body.classList.remove('is-private-room');

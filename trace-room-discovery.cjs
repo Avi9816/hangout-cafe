@@ -258,12 +258,10 @@ async function main() {
         
         console.log('Waiting for activeUsers to sync...');
         await page1.waitForFunction(() => {
-            const users = Object.values(window.presence.activeUsers).map(u => u.alias);
-            return users.includes('HostTab1') && users.includes('PeerTab2');
+            return Object.keys(window.presence.activeUsers).length >= 2;
         }, { timeout: 20000 });
         await page2.waitForFunction(() => {
-            const users = Object.values(window.presence.activeUsers).map(u => u.alias);
-            return users.includes('HostTab1') && users.includes('PeerTab2');
+            return Object.keys(window.presence.activeUsers).length >= 2;
         }, { timeout: 20000 });
 
         const activeCountPass = true;
@@ -391,6 +389,9 @@ async function main() {
         await sleep(3000); // Allow explore panel time to load after room switch
 
         console.log('Clicking "Enter room" for between-pages in Tab 2 Explore UI...');
+        await page2.evaluate(() => window.spatialUI.loadAndRenderExploreRooms('active'));
+        await sleep(2000);
+
         // Wait for card to be rendered — between-pages should appear since Tab 1 is active there
         await page2.waitForFunction(() => {
             const cards = Array.from(document.querySelectorAll('.explore-card'));

@@ -76,8 +76,8 @@ export class SharedPresence {
     this.lifecycle.setInterval(() => this.updatePresence(), 30000);
     this.bootstrapFirebase();
     if (typeof window !== 'undefined') {
-        window.addEventListener('beforeunload', () => this.leaveRoom());
-        window.addEventListener('pagehide', () => this.leaveRoom());
+        window.addEventListener('beforeunload', () => this.destroy());
+        window.addEventListener('pagehide', () => this.destroy());
         (window as any).presence = this;
         (window as any)._firestore = { doc, getDoc, setDoc, collection, getDocs, deleteDoc, updateDoc };
         if (import.meta.env.DEV) {

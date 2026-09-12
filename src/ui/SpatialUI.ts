@@ -42,6 +42,7 @@ export class SpatialUI {
   private lastHistorySig = '';
   private lastMemoriesSig = '';
   private lastPhotosSig = '';
+  private lastWhispersSig = '';
   private lastEchoesSig = '';
   private lastFavoritesSig = '';
 
@@ -52,6 +53,7 @@ export class SpatialUI {
     this.lastHistorySig = '';
     this.lastMemoriesSig = '';
     this.lastPhotosSig = '';
+    this.lastWhispersSig = '';
     this.lastEchoesSig = '';
     this.lastFavoritesSig = '';
   }
@@ -574,7 +576,7 @@ export class SpatialUI {
 
   renderWall() {
     devLog('[DEBUG_SPATIAL_UI] renderWall called, notes count =', this.notes.length);
-    const sig = this.notes.length + '_' + this.notes.map(n => `${n.id}_${n.text.length}_${n.author}`).join(',');
+    const sig = this.notes.length + '_' + this.notes.map(n => `${n.id}_${n.text}_${n.author}`).join(',');
     if (sig === this.lastNotesSig) {
         devLog('[DEBUG_SPATIAL_UI] renderWall skipped (cached)');
         return;
@@ -631,7 +633,7 @@ export class SpatialUI {
 
   renderObjects() {
     devLog('[DEBUG_SPATIAL_UI] renderObjects called, objects count =', this.objects.length);
-    const sig = this.objects.length + '_' + this.objects.map(o => `${o.id}_${o.emoji}_${o.label.length}_${o.author}`).join(',');
+    const sig = this.objects.length + '_' + this.objects.map(o => `${o.id}_${o.emoji}_${o.label}_${o.author}`).join(',');
     if (sig === this.lastObjectsSig) {
         devLog('[DEBUG_SPATIAL_UI] renderObjects skipped (cached)');
         return;
@@ -703,7 +705,8 @@ export class SpatialUI {
   renderQueue() {
     const presence = (window as any).presence;
     const isHost = presence?.currentVideoState && presence.currentVideoState.hostId === presence.userId;
-    const sig = this.queue.length + '_' + this.queue.map(q => `${q.id}_${q.status}`).join(',') + `_host_${isHost}`;
+    const currentHostName = presence?.currentVideoState?.host || '';
+    const sig = this.queue.length + '_' + this.queue.map(q => `${q.id}_${q.status}_${q.title}_${q.addedBy}`).join(',') + `_host_${isHost}_curr_${currentHostName}`;
     if (sig === this.lastQueueSig) {
         devLog('[DEBUG_SPATIAL_UI] renderQueue skipped (cached)');
         return;
@@ -901,7 +904,7 @@ export class SpatialUI {
   }
 
   renderHistory() {
-    const sig = this.history.length + '_' + this.history.map(h => `${h.id}_${h.type}`).join(',');
+    const sig = this.history.length + '_' + this.history.map(h => `${h.id}_${h.type}_${h.text}_${h.createdAt}`).join(',');
     if (sig === this.lastHistorySig) {
         devLog('[DEBUG_SPATIAL_UI] renderHistory skipped (cached)');
         return;
@@ -1000,7 +1003,7 @@ export class SpatialUI {
       max: 3
     });
 
-    const sig = echoes.length + '_' + echoes.map(e => `${e.id}_${e.text.length}_${e.tone}`).join(',');
+    const sig = echoes.length + '_' + echoes.map(e => `${e.id}_${e.text}_${e.tone}_${e.createdAt || 0}`).join(',');
     if (sig === this.lastEchoesSig) {
         devLog('[DEBUG_SPATIAL_UI] renderEchoes skipped (cached)');
         return;
@@ -1070,7 +1073,7 @@ export class SpatialUI {
     const isPublic = isPublicSpace(presence.roomCode || '');
     const displayList = isPublic ? combined.slice(0, 20) : combined;
 
-    const sig = displayList.length + '_' + displayList.map(item => `${item.id}_${item.type}_${item.createdAt}`).join(',');
+    const sig = displayList.length + '_' + displayList.map(item => `${item.id}_${item.type}_${item.title}_${item.description || ''}_${item.createdBy || ''}_${item.creatorUid || ''}_${item.createdAt}`).join(',') + `_uid_${presence.userId || ''}`;
     if (sig === this.lastMemoriesSig) {
         devLog('[DEBUG_SPATIAL_UI] renderMemories skipped (cached)');
         return;
@@ -1276,7 +1279,6 @@ export class SpatialUI {
   renderWhispers() {
     const listEl = $('room-whispers-list');
     if (!listEl) return;
-    listEl.innerHTML = '';
 
     const presence = (window as any).presence;
     if (!presence) return;
@@ -1291,11 +1293,21 @@ export class SpatialUI {
       });
 
     if (whispers.length === 0) {
+        listEl.innerHTML = '';
+        this.lastWhispersSig = 'empty';
         return;
     }
 
     // Limit display to latest 5 whispers
     const latestWhispers = whispers.slice(0, 5);
+    const sig = latestWhispers.length + '_' + latestWhispers.map(w => `${w.id}_${w.description || ''}_${w.createdBy || ''}_${w.creatorUid || ''}_${w.createdAt}`).join(',') + `_uid_${presence.userId || ''}`;
+    if (sig === this.lastWhispersSig) {
+        devLog('[DEBUG_SPATIAL_UI] renderWhispers skipped (cached)');
+        return;
+    }
+    this.lastWhispersSig = sig;
+
+    listEl.innerHTML = '';
 
     const frag = document.createDocumentFragment();
     latestWhispers.forEach(item => {
@@ -1375,7 +1387,8 @@ export class SpatialUI {
   }
 
   renderPhotos() {
-    const sig = this.photos.length + '_' + this.photos.map(p => `${p.id}_${p.createdAt}`).join(',');
+    const presence = (window as any).presence;
+    const sig = this.photos.length + '_' + this.photos.map(p => `${p.id}_${p.url}_${p.caption}_${p.uploadedBy}_${p.creatorUid}_${p.createdAt}`).join(',') + `_uid_${presence?.userId || ''}`;
     if (sig === this.lastPhotosSig) {
         devLog('[DEBUG_SPATIAL_UI] renderPhotos skipped (cached)');
         return;
@@ -1386,7 +1399,6 @@ export class SpatialUI {
     if (!gridEl) return;
     gridEl.innerHTML = '';
 
-    const presence = (window as any).presence;
     if (!presence) return;
 
     if (this.photos.length === 0) {
@@ -1729,7 +1741,7 @@ export class SpatialUI {
   }
 
   renderFavorites(favorites: any[]) {
-    const sig = favorites.length + '_' + favorites.map((f: any) => `${f.roomCode}_${f.activeCount || 0}_${f.memoryCount || 0}`).join(',');
+    const sig = favorites.length + '_' + favorites.map((f: any) => `${f.roomCode}_${f.displayName || ''}_${f.theme || ''}_${f.activeCount || 0}_${f.memoryCount || 0}_${f.photoCount || 0}_${f.lastActiveAt || 0}`).join(',');
     if (sig === this.lastFavoritesSig) {
         devLog('[DEBUG_SPATIAL_UI] renderFavorites skipped (cached)');
         return;
@@ -2080,6 +2092,7 @@ export class SpatialUI {
       return;
     }
 
+    container.className = `room-section public-activity-card theme-${roomCode}`;
     container.innerHTML = '';
 
     // Title & Subtitle

@@ -146,6 +146,17 @@ service cloud.firestore {
         && isValidPayload(d.type, d.payload);
     }
 
+    // Helper: Validates photo document schema on create.
+    // Enforces that creatorUid matches request.auth.uid to prevent impersonation or ownership spoofing.
+    function isValidPhoto() {
+      let d = request.resource.data;
+      return d.creatorUid == request.auth.uid
+        && d.uploadedBy is string && d.uploadedBy.size() >= 1 && d.uploadedBy.size() <= 80
+        && d.createdAt is int && d.createdAt > 0
+        && d.url is string && d.url.size() >= 1 && d.url.size() <= 2048
+        && (!('caption' in d) || (d.caption is string && d.caption.size() <= 280));
+    }
+
     // Helper: Root room document keys that public spaces are permitted to update.
     // Excludes all media/host/queue/photo fields that are private-gathering-only.
     // Each key is justified by a specific write path in Presence.ts:
@@ -315,7 +326,7 @@ service cloud.firestore {
     // open risk documented in storage.rules (no custom metadata on upload).
     match /artifacts/{appId}/public/data/rooms/{roomCode}/photos/{photoId} {
       allow read: if true;
-      allow create: if isAuthenticated() && !isPublicSpace(roomCode);
+      allow create: if isAuthenticated() && !isPublicSpace(roomCode) && isValidPhoto();
       allow update: if false;
       allow delete: if isAuthenticated() && resource.data.creatorUid == request.auth.uid;
     }
