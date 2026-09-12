@@ -149,13 +149,18 @@ export class SpatialUI {
 
   setupListeners() {
     const postNote = () => {
-      const input = this.elements.noteInput as HTMLInputElement;
-      const text = input?.value.trim(); if(!text) return;
+      const whisperInput = $<HTMLTextAreaElement>('whisper-input');
+      const noteInput = this.elements.noteInput as HTMLInputElement;
+      const text = (whisperInput?.value || noteInput?.value || '').trim();
+      if (!text) return;
       this.bus.emit(APP_EVENTS.UI_SFX_REQUEST, 'paper_pin');
       const note: Note = { text, author: 'wanderer', id: Date.now() };
       devLog('[NOTE_POSTED_EMIT]');
       this.bus.emit(APP_EVENTS.NOTE_POSTED, note);
-      input.value = ''; 
+      if (whisperInput) whisperInput.value = '';
+      if (noteInput) noteInput.value = '';
+      const whisperCharCount = $('whisper-char-count');
+      if (whisperCharCount) whisperCharCount.textContent = '0 / 180';
     };
 
     $('btn-post-note')?.addEventListener('click', postNote);
